@@ -17,4 +17,10 @@ def _encoder() -> Any:
 
 
 def count_tokens(text: str) -> int:
-    return len(_encoder().encode(text))
+    """Token count for ``text``. Falls back to a ~chars/4 heuristic if the tiktoken
+    vocab can't load (e.g. offline) — this is only a budget, so it must never raise
+    and disable history/feed/chat."""
+    try:
+        return len(_encoder().encode(text))
+    except Exception:
+        return len(text) // 4
