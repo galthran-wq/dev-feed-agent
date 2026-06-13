@@ -54,6 +54,37 @@ async def test_token_round_trips_and_is_encrypted_at_rest(
     assert reloaded.github_access_token == TOKEN
 
 
+async def test_key_rotation_returns_raw_and_warns(db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A row encrypted under key A, read under key B (rotation), cannot be decrypted.
+    We must not raise; we return the stored ciphertext and emit an observable warning
+    (the documented downgrade behavior) rather than silently handing out garbage."""
+    key_a = Fernet.generate_key().decode()
+    monkeypatch.setattr(config.settings, "token_encryption_key", key_a)
+
+    repo = UserRepository(db_session)
+    user, _ = await repo.upsert_github_user(github_id="55", username="rotate", access_token=TOKEN, avatar_url=None)
+    user_id = user.id
+
+    raw_ciphertext = await _raw_stored_token(db_session, "55")
+    assert raw_ciphertext is not None and raw_ciphertext != TOKEN
+
+    # Rotate the key. The old ciphertext is Fernet-shaped but undecryptable under key B.
+    key_b = Fernet.generate_key().decode()
+    monkeypatch.setattr(config.settings, "token_encryption_key", key_b)
+
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        "src.models.postgres.types.logger",
+        type("L", (), {"warning": lambda self, event, **kw: warnings.append(event)})(),
+    )
+
+    db_session.expunge_all()
+    reloaded = (await db_session.execute(select(UserModel).where(UserModel.id == user_id))).scalar_one()
+    # Never raises; returns the raw (still-encrypted) value and warns about the mismatch.
+    assert reloaded.github_access_token == raw_ciphertext
+    assert "encrypted_token_undecryptable" in warnings
+
+
 async def test_plaintext_when_no_key(db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(config.settings, "token_encryption_key", "")
 

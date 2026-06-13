@@ -13,12 +13,17 @@ plaintext) rows — or rows written while the key was disabled — pass through 
 once a key is set, instead of raising ``InvalidToken``.
 """
 
+import base64
+import binascii
 from functools import lru_cache
 
+import structlog
 from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import String
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.types import TypeDecorator
+
+logger = structlog.get_logger()
 
 
 @lru_cache(maxsize=8)
@@ -27,6 +32,17 @@ def _fernet_for(key: str) -> Fernet:
     the key on every bind/result; keyed by the key string so a changed key
     (e.g. in tests) yields a fresh instance."""
     return Fernet(key.encode())
+
+
+def _looks_like_fernet(value: str) -> bool:
+    """Heuristic: does ``value`` have the shape of a Fernet token? A Fernet token
+    is urlsafe-base64 whose first decoded byte is the version marker ``0x80``.
+    Used only to distinguish "genuine legacy plaintext" (pass through silently)
+    from "Fernet-shaped but undecryptable" (key mismatch/rotation — worth warning)."""
+    try:
+        return base64.urlsafe_b64decode(value.encode())[:1] == b"\x80"
+    except (binascii.Error, ValueError):
+        return False
 
 
 def _current_key() -> str:
@@ -67,6 +83,17 @@ class EncryptedString(TypeDecorator[str]):
         try:
             return _fernet_for(key).decrypt(value.encode()).decode()
         except InvalidToken:
-            # Not a Fernet token (legacy plaintext / written while key disabled).
-            # Tolerate it and return as-is rather than raising.
+            # Either genuine legacy plaintext (written before encryption / while the
+            # key was disabled) or a Fernet token we can't decrypt (wrong key — e.g.
+            # the key was rotated). We must not raise (the column is opaque to callers
+            # and hard-failing a read is worse), so return the raw value — but if it
+            # *looks* like a Fernet token, surface a warning so a silent rotation
+            # mismatch is observable instead of handing out ciphertext-as-token.
+            if _looks_like_fernet(value):
+                logger.warning("encrypted_token_undecryptable", reason="key_mismatch_or_rotation")
+            return value
+        except Exception:
+            # Defensive: honor the never-raise contract for any unexpected decode
+            # error on arbitrary legacy content.
+            logger.warning("encrypted_token_decrypt_error")
             return value
