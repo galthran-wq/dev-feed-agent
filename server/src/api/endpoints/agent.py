@@ -81,10 +81,15 @@ async def poll_now(
     session: AsyncSession = Depends(get_postgres_session),
 ) -> PollNowResponse:
     """Dev/testing trigger: run one feed pass for the current user now."""
-    conn = await ConnectionRepository(session).get_or_create(current_user.id)
+    repo = ConnectionRepository(session)
+    conn = await repo.get_or_create(current_user.id)
     wait = cooldown_remaining(conn.last_feed_at, settings.poll_now_cooldown_seconds)
     if wait:
         raise AppError(status_code=429, detail=f"Feed poll is on cooldown; retry in {wait}s")
+    # Stamp the attempt up front so even a failing/long curation consumes the cooldown
+    # window (run_for_user re-stamps on a successful pass). Prevents hammering the
+    # expensive LLM/GitHub path by retrying a curation that errors.
+    await repo.mark_fed(conn)
     result = await feed.run_for_user(session, conn)
     return PollNowResponse(
         delivered=result.delivered,

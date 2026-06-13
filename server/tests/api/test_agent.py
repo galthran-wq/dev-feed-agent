@@ -1,7 +1,9 @@
 from datetime import UTC, datetime
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
+from src.core import config
 from src.models.postgres.users import UserModel
 from src.repositories.connections import ConnectionRepository
 
@@ -50,6 +52,22 @@ async def test_poll_now_cooldown_returns_429(
     await db_session.commit()
 
     resp = await auth_client.post("/api/agent/poll-now")
+    assert resp.status_code == 429
+    assert "cooldown" in resp.json()["detail"].lower()
+
+
+async def test_rebuild_cooldown_returns_429(
+    auth_client: AsyncClient, test_user: UserModel, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Get past the github (400) and agent-disabled (503) gates so we reach the cooldown.
+    monkeypatch.setattr(config.settings, "openrouter_api_key", "test-key")
+    test_user.github_username = "octocat"
+    repo = ConnectionRepository(db_session)
+    conn = await repo.get_or_create(test_user.id)
+    conn.last_profile_build_at = datetime.now(UTC)
+    await db_session.commit()
+
+    resp = await auth_client.post("/api/agent/rebuild")
     assert resp.status_code == 429
     assert "cooldown" in resp.json()["detail"].lower()
 

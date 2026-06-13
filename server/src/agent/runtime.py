@@ -16,6 +16,7 @@ from src.core.database import AsyncSessionLocal
 from src.core.exceptions import AppError
 from src.models.postgres.users import UserModel
 from src.repositories.agent_messages import AgentMessageRepository
+from src.repositories.connections import ConnectionRepository
 from src.repositories.profiles import ProfileRepository
 from src.repositories.users import UserRepository
 
@@ -52,7 +53,9 @@ async def build_profile(session: AsyncSession, user: UserModel) -> str:
 
 
 async def build_profile_safe(user_id: UUID) -> None:
-    """Fire-and-forget profile build with its own session (used on first connect)."""
+    """Fire-and-forget profile build with its own session (used on first connect and
+    the /rebuild trigger). On failure, clear the rebuild cooldown stamp so a crashed
+    build doesn't lock the user out for the whole cooldown window with no profile."""
     try:
         async with AsyncSessionLocal() as session:
             user = await UserRepository(session).get_user(user_id)
@@ -60,6 +63,14 @@ async def build_profile_safe(user_id: UUID) -> None:
                 await build_profile(session, user)
     except Exception as exc:
         logger.warning("profile_build_failed", user_id=str(user_id), error=str(exc))
+        try:
+            async with AsyncSessionLocal() as session:
+                conn = await ConnectionRepository(session).get_by_user_id(user_id)
+                if conn is not None:
+                    conn.last_profile_build_at = None
+                    await session.commit()
+        except Exception as clear_exc:
+            logger.warning("rebuild_cooldown_clear_failed", user_id=str(user_id), error=str(clear_exc))
 
 
 async def chat(session: AsyncSession, user: UserModel, message: str) -> str:
