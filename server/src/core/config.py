@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 24 * 60
 
+    # Optional urlsafe-base64 32-byte Fernet key for encrypting secrets at rest
+    # (e.g. the stored GitHub access token). Distinct from SECRET_KEY. Empty =>
+    # tokens are stored as plaintext (opt-in, like everything else in this app).
+    # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    token_encryption_key: str = ""
+
     # Public URL of the app — used to build the GitHub OAuth callback and the
     # post-login redirect back to the SPA, and the Telegram deep link.
     app_base_url: str = "http://localhost:5746"
@@ -67,6 +73,10 @@ class Settings(BaseSettings):
     @property
     def github_oauth_enabled(self) -> bool:
         return bool(self.github_oauth_client_id and self.github_oauth_client_secret)
+
+    @property
+    def token_encryption_enabled(self) -> bool:
+        return bool(self.token_encryption_key)
 
     @property
     def profile_model(self) -> str:
