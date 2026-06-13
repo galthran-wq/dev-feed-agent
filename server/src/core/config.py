@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     explore_ratio: float = 0.3
     # Token budget for replayed agent conversation history (the rest is trimmed oldest-first).
     agent_history_token_budget: int = 12000
+    # Per-tool-result cap (chars) when PERSISTING history for replay. Feed/chat runs store raw
+    # external tool payloads (issue bodies, Reddit/HN/arXiv text); replaying them into later
+    # authenticated chat turns amplifies prompt-injection and causes mode-bleed. Large tool
+    # *results* are truncated to this many chars (tool calls/text kept intact) before storage.
+    # <= 0 strips them to a placeholder only. The live run still sees full tool output.
+    agent_history_tool_result_max_chars: int = 600
 
     @property
     def agent_enabled(self) -> bool:

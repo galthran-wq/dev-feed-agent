@@ -8,9 +8,12 @@ be configured (OPENROUTER_API_KEY) — otherwise these raise AppError(503).
 from uuid import UUID
 
 import structlog
+from pydantic_ai.agent import AgentRunResult
+from pydantic_ai.messages import ModelMessagesTypeAdapter
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.agent import agents
 from src.agent.deps import AgentDeps
+from src.agent.history import sanitize_messages_for_storage
 from src.core.config import settings
 from src.core.database import AsyncSessionLocal
 from src.core.exceptions import AppError
@@ -25,6 +28,16 @@ logger = structlog.get_logger()
 def _require_agent() -> None:
     if not settings.agent_enabled:
         raise AppError(status_code=503, detail="LLM agent is not configured (set OPENROUTER_API_KEY)")
+
+
+def _sanitized_new_messages_json(result: AgentRunResult[str]) -> bytes:
+    """Serialize a run's new messages with oversized tool *results* truncated for storage.
+
+    The live run already saw full tool output; only what is PERSISTED for later replay is
+    trimmed, isolating raw feed/chat tool payloads from authenticated chat turns (#11).
+    """
+    sanitized = sanitize_messages_for_storage(result.new_messages(), settings.agent_history_tool_result_max_chars)
+    return ModelMessagesTypeAdapter.dump_json(sanitized)
 
 
 def _deps(session: AsyncSession, user: UserModel) -> AgentDeps:
@@ -72,7 +85,7 @@ async def chat(session: AsyncSession, user: UserModel, message: str) -> str:
     async with agent:
         result = await agent.run(message, message_history=history, deps=_deps(session, user))
 
-    await msg_repo.append(user.id, result.new_messages_json())
+    await msg_repo.append(user.id, _sanitized_new_messages_json(result))
     return result.output
 
 
@@ -132,7 +145,7 @@ async def curate_feed(session: AsyncSession, user: UserModel) -> tuple[str, list
     async with agent:
         result = await agent.run(prompt, message_history=history, deps=deps)
 
-    await msg_repo.append(user.id, result.new_messages_json())
+    await msg_repo.append(user.id, _sanitized_new_messages_json(result))
     # `recorded` is the authoritative record of what the agent surfaced this run; the keys
     # let the feed pass mark exactly these items delivered once they actually reach the user.
     recorded_keys = [(r["source"], r["external_id"]) for r in deps.recorded if r.get("source") and r.get("external_id")]
