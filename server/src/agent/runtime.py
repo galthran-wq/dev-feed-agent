@@ -68,7 +68,7 @@ async def chat(session: AsyncSession, user: UserModel, message: str) -> str:
     msg_repo = AgentMessageRepository(session)
     history = await msg_repo.load(user.id, max_tokens=settings.agent_history_token_budget)
 
-    agent = agents.make_chat_agent()
+    agent = await agents.make_chat_agent()
     async with agent:
         result = await agent.run(message, message_history=history, deps=_deps(session, user))
 
@@ -125,7 +125,7 @@ async def curate_feed(session: AsyncSession, user: UserModel) -> tuple[str, int]
     msg_repo = AgentMessageRepository(session)
     history = await msg_repo.load(user.id, max_tokens=settings.agent_history_token_budget)
 
-    agent = agents.make_chat_agent()
+    agent = await agents.make_chat_agent()
     deps = _deps(session, user)
     async with agent:
         result = await agent.run(prompt, message_history=history, deps=deps)

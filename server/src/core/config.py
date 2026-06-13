@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     mcp_hn_url: str = ""
     mcp_arxiv_url: str = ""
     mcp_reddit_url: str = ""
+    # Seconds to wait when probing each MCP source before a run; unreachable sources are
+    # dropped (logged) instead of aborting the whole run. Probes run concurrently.
+    mcp_probe_timeout: float = 5.0
 
     # --- Feed curation ---
     discovery_enabled: bool = True

@@ -3,6 +3,9 @@
 A fresh ``Agent`` is built per run (cheap — no network at construction) so there is no
 shared mutable state across concurrent requests; MCP connections open lazily inside
 ``async with agent``. The model is OpenRouter via its OpenAI-compatible endpoint.
+
+``make_chat_agent`` is async because it *probes* its MCP sources first and wires in only
+the reachable ones — a single dead source must not abort the whole run (see ``mcp.py``).
 """
 
 from functools import lru_cache
@@ -12,7 +15,7 @@ from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from src.agent.deps import AgentDeps
-from src.agent.mcp import build_mcp_servers
+from src.agent.mcp import reachable_mcp_servers
 from src.agent.tools import CHAT_TOOLS, PROFILE_TOOLS
 from src.core.config import settings
 
@@ -51,14 +54,18 @@ def make_summarizer_agent() -> Agent[None, str]:
     )
 
 
-def make_chat_agent() -> Agent[AgentDeps, str]:
+async def make_chat_agent() -> Agent[AgentDeps, str]:
     """The one memory-aware agent: handles Telegram chat AND assembles the scheduled
     feed (driven by a synthetic turn). Free-form text out; it records what it surfaces
-    via the record_feed_items tool. Can call all tools + MCP sources."""
+    via the record_feed_items tool. Can call all tools + MCP sources.
+
+    Probes the configured MCP sources first and wires in only the reachable ones, so an
+    unreachable source is skipped (logged) rather than aborting the run.
+    """
     return Agent(
         _model(settings.agent_model),
         deps_type=AgentDeps,
         system_prompt=_prompt("chat.md"),
         tools=CHAT_TOOLS,
-        toolsets=build_mcp_servers(),
+        toolsets=await reachable_mcp_servers(),
     )
