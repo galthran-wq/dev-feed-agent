@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.postgres.feed_items import FeedItemModel
 
@@ -51,6 +51,12 @@ class FeedItemRepository:
         await self.session.commit()
         await self.session.refresh(item)
         return item
+
+    async def count(self, user_id: UUID) -> int:
+        result = await self.session.execute(
+            select(func.count()).select_from(FeedItemModel).where(FeedItemModel.user_id == user_id)
+        )
+        return int(result.scalar_one())
 
     async def list_recent(self, user_id: UUID, limit: int = 50) -> list[FeedItemModel]:
         result = await self.session.execute(

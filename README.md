@@ -67,7 +67,7 @@ nginx (reverse proxy, :5746)
 |---------|---------|
 | **server** | FastAPI: OAuth, agent runtime, scheduler, Telegram bot |
 | **client** | Vue 3 SPA (landing + Connect + Go-to-Telegram) |
-| **postgres** | Users, connections, profiles, chat, feed-item ledger |
+| **postgres** | Users, connections, profiles, agent message history, feed-item ledger |
 | **nginx** | Reverse proxy, serves the built SPA |
 | **mcp-hn / mcp-arxiv / mcp-reddit** | `supergateway` wrapping each stdio MCP server as HTTP |
 | **prometheus / grafana** | Metrics + dashboards |
@@ -75,8 +75,8 @@ nginx (reverse proxy, :5746)
 ### Backend layout (`server/src/`)
 
 - `agent/` — the agent layer: `prompts/` (system prompts), `tools/` (GitHub + memory + feed tools),
-  `mcp.py` (MCP toolsets), `agents.py` (agent factories + curation schema), `runtime.py`
-  (`build_profile` / `chat` / `curate_feed`).
+  `mcp.py` (MCP toolsets), `agents.py` (agent factories), `runtime.py` (`build_profile` / `chat` /
+  `curate_feed`). Chat and the feed share one agent + persisted message history; the feed is free-form text.
 - `services/` — `github_oauth`, `feed` (per-user pass), `scheduler` (cron), `telegram_bot`, `notifier`.
 - `models/postgres/`, `repositories/`, `api/endpoints/` — standard repository-pattern layers.
 

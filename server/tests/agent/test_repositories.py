@@ -1,7 +1,15 @@
 from uuid import uuid4
 
+from pydantic_ai.messages import (
+    ModelMessagesTypeAdapter,
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    UserPromptPart,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.postgres.profiles import PROFILE_SECTIONS
+from src.repositories.agent_messages import AgentMessageRepository
 from src.repositories.connections import ConnectionRepository
 from src.repositories.feed_items import FeedItemRepository
 from src.repositories.profiles import ProfileRepository
@@ -52,6 +60,34 @@ async def test_feed_item_dedup(db_session: AsyncSession) -> None:
     assert ("github", "owner/other") in unseen
 
     assert await repo.filter_unseen(user_id, []) == set()
+    assert await repo.count(user_id) == 1
+
+
+async def test_agent_message_history_roundtrip(db_session: AsyncSession) -> None:
+    repo = AgentMessageRepository(db_session)
+    user_id = uuid4()
+
+    run1 = [
+        ModelRequest(parts=[UserPromptPart(content="hi")]),
+        ModelResponse(parts=[TextPart(content="hello")]),
+    ]
+    run2 = [
+        ModelRequest(parts=[UserPromptPart(content="any rust news?")]),
+        ModelResponse(parts=[TextPart(content="here you go")]),
+    ]
+    await repo.append(user_id, ModelMessagesTypeAdapter.dump_json(run1))
+    await repo.append(user_id, ModelMessagesTypeAdapter.dump_json(run2))
+
+    # Whole runs concatenated, chronological, tool/turn structure preserved.
+    loaded = await repo.load(user_id)
+    assert len(loaded) == 4
+    assert isinstance(loaded[0], ModelRequest)
+    assert isinstance(loaded[-1], ModelResponse)
+
+    # max_runs keeps only the most recent runs (the latest, here run2).
+    recent = await repo.load(user_id, max_runs=1)
+    assert len(recent) == 2
+    assert recent[0].parts[0].content == "any rust news?"
 
 
 async def test_telegram_link_is_single_use_and_no_hijack(db_session: AsyncSession) -> None:

@@ -1,5 +1,7 @@
-"""Outbound Telegram delivery for feed items.
+"""Outbound Telegram delivery.
 
+The agent writes the feed as free-form text, so we send it verbatim (plain text —
+no Markdown parsing to choke on arbitrary content), chunked under Telegram's limit.
 A single Bot instance is shared with the interactive bot (``telegram_bot.py``).
 """
 
@@ -8,18 +10,10 @@ from typing import Any
 
 import structlog
 from src.core.config import settings
-from src.models.postgres.feed_items import FeedItemModel
 
 logger = structlog.get_logger()
 
-_SOURCE_ICON = {
-    "github": "🐙",
-    "hf": "🤗",
-    "huggingface": "🤗",
-    "hackernews": "🟠",
-    "arxiv": "📄",
-    "reddit": "👽",
-}
+_TELEGRAM_LIMIT = 4096
 
 
 @lru_cache(maxsize=1)
@@ -32,26 +26,28 @@ def get_bot() -> Any:
     return Bot(token=settings.telegram_bot_token)
 
 
-def format_feed_item(item: FeedItemModel) -> str:
-    icon = _SOURCE_ICON.get(item.source, "🔹")
-    bucket = "🧭 explore" if item.bucket == "explore" else "🎯 for you"
-    lines = [
-        f"{icon} *{_escape(item.title)}*",
-        f"{item.url}",
-    ]
-    if item.summary:
-        lines.append(f"_{_escape(item.summary[:200])}_")
-    if item.reason:
-        lines.append(f"💡 {_escape(item.reason)}")
-    lines.append(bucket)
-    return "\n".join(lines)
-
-
-def _escape(text: str) -> str:
-    # Minimal escaping for Telegram Markdown (v1): defang the markers we don't intend.
-    return text.replace("*", "∗").replace("_", " ").replace("`", "'").replace("[", "(").replace("]", ")")
+def _chunks(text: str, limit: int = _TELEGRAM_LIMIT) -> list[str]:
+    """Split text into <=limit pieces, preferring line boundaries."""
+    out: list[str] = []
+    buf = ""
+    for line in text.split("\n"):
+        candidate = f"{buf}\n{line}" if buf else line
+        if len(candidate) <= limit:
+            buf = candidate
+            continue
+        if buf:
+            out.append(buf)
+        # A single line longer than the limit is hard-split.
+        while len(line) > limit:
+            out.append(line[:limit])
+            line = line[limit:]
+        buf = line
+    if buf:
+        out.append(buf)
+    return out or [""]
 
 
 async def send_text(chat_id: str, text: str) -> None:
     bot = get_bot()
-    await bot.send_message(chat_id, text, parse_mode="Markdown", disable_web_page_preview=True)
+    for chunk in _chunks(text):
+        await bot.send_message(chat_id, chunk, disable_web_page_preview=True)

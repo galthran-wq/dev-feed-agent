@@ -1,7 +1,8 @@
 """Orchestration entry points: build a profile, chat, and curate a feed.
 
-Each opens the right agent, supplies per-user deps, and persists results. The agent
-must be configured (OPENROUTER_API_KEY) — otherwise these raise AppError(503).
+Chat and the scheduled feed run through the *same* memory-aware agent and share one
+persisted message history, so conversation and feed inform each other. The agent must
+be configured (OPENROUTER_API_KEY) — otherwise these raise AppError(503).
 """
 
 from uuid import UUID
@@ -9,14 +10,12 @@ from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.agent import agents
-from src.agent.agents import CuratedItem
 from src.agent.deps import AgentDeps
 from src.core.config import settings
 from src.core.database import AsyncSessionLocal
 from src.core.exceptions import AppError
-from src.models.postgres.feed_items import FeedItemModel
 from src.models.postgres.users import UserModel
-from src.repositories.chat_messages import ChatMessageRepository
+from src.repositories.agent_messages import AgentMessageRepository
 from src.repositories.feed_items import FeedItemRepository
 from src.repositories.profiles import ProfileRepository
 from src.repositories.users import UserRepository
@@ -65,69 +64,50 @@ async def build_profile_safe(user_id: UUID) -> None:
 
 
 async def chat(session: AsyncSession, user: UserModel, message: str) -> str:
-    """Handle one chat turn: persist it, run the memory-aware agent, persist the reply."""
+    """Handle one chat turn against the shared, persisted message history."""
     _require_agent()
-    chat_repo = ChatMessageRepository(session)
-    history = await chat_repo.list_recent(user.id, limit=10)
-    convo = "\n".join(f"{m.role}: {m.content}" for m in history)
-    prompt = (f"Recent conversation:\n{convo}\n\n" if convo else "") + f"User: {message}"
+    msg_repo = AgentMessageRepository(session)
+    history = await msg_repo.load(user.id)
 
     agent = agents.make_chat_agent()
     async with agent:
-        result = await agent.run(prompt, deps=_deps(session, user))
+        result = await agent.run(message, message_history=history, deps=_deps(session, user))
 
-    reply = result.output
-    await chat_repo.add(user.id, "user", message)
-    await chat_repo.add(user.id, "assistant", reply)
-    return reply
+    await msg_repo.append(user.id, result.new_messages_json())
+    return result.output
 
 
-async def curate_feed(session: AsyncSession, user: UserModel) -> list[FeedItemModel]:
-    """Build today's feed: gather candidates, score/bucket them, dedup, record. No delivery."""
+async def curate_feed(session: AsyncSession, user: UserModel) -> tuple[str, int]:
+    """Assemble the feed as a synthetic turn through the shared agent.
+
+    Returns ``(digest_text, new_items)`` — the free-form digest to deliver and how many
+    items the agent newly recorded (0 means nothing fresh, skip delivery). The agent
+    records what it surfaces via the record_feed_items tool, which is the dedup ledger.
+    """
     _require_agent()
+    feed_repo = FeedItemRepository(session)
+    before = await feed_repo.count(user.id)
+
     explore_n = round(settings.feed_size * settings.explore_ratio)
     exploit_n = max(settings.feed_size - explore_n, 0)
-
-    profile_md = await ProfileRepository(session).get_markdown(user.id)
     prompt = (
-        f"Curate a feed for this developer.\n\nProfile:\n{profile_md}\n\n"
-        f"Return up to {exploit_n} 'exploit' items and up to {explore_n} 'explore' items. "
-        "Check what was recently shown and do not repeat it. Diversify across sources."
+        "It's time to assemble this user's scheduled feed. Gather fresh, relevant items across "
+        "your sources (GitHub issues/repos, HuggingFace, Hacker News, arXiv, Reddit). Aim for about "
+        f"{exploit_n} 'exploit' items (squarely their interests) and {explore_n} 'explore' items "
+        "(adjacent new horizons). First check what was already shown and skip it. Record everything "
+        "you decide to surface with record_feed_items, then write a concise, friendly digest of "
+        "those items with links. If nothing new is worth sending, record nothing and reply with a "
+        "short 'nothing new' note."
     )
 
-    agent = agents.make_curator_agent()
+    msg_repo = AgentMessageRepository(session)
+    history = await msg_repo.load(user.id)
+
+    agent = agents.make_chat_agent()
     async with agent:
-        result = await agent.run(prompt, deps=_deps(session, user))
+        result = await agent.run(prompt, message_history=history, deps=_deps(session, user))
 
-    return await _record_feed(session, user.id, result.output.items)
-
-
-async def _record_feed(session: AsyncSession, user_id: UUID, items: list[CuratedItem]) -> list[FeedItemModel]:
-    """Drop invalid + already-seen items, persist the rest as delivered (in the agent's order)."""
-    feed_repo = FeedItemRepository(session)
-    # The curator already decided what's worth showing — inclusion is the signal, so we
-    # only drop items missing the identifiers we need and ones we've shown before.
-    candidates = [i for i in items if i.url and i.external_id]
-    unseen = await feed_repo.filter_unseen(user_id, [(i.source, i.external_id) for i in candidates])
-
-    recorded: list[FeedItemModel] = []
-    for item in candidates:
-        if (item.source, item.external_id) not in unseen:
-            continue
-        try:
-            stored = await feed_repo.add(
-                user_id,
-                source=item.source,
-                item_type=item.item_type,
-                external_id=item.external_id,
-                url=item.url,
-                title=item.title,
-                summary=item.summary or None,
-                reason=item.reason,
-                bucket=item.bucket if item.bucket in ("exploit", "explore") else "exploit",
-            )
-            recorded.append(stored)
-        except Exception as exc:  # unique-race or bad data — skip, don't abort the batch
-            await session.rollback()
-            logger.warning("feed_item_record_failed", error=str(exc))
-    return recorded
+    await msg_repo.append(user.id, result.new_messages_json())
+    new_items = await feed_repo.count(user.id) - before
+    logger.info("feed_curated", user_id=str(user.id), new_items=new_items)
+    return result.output, new_items

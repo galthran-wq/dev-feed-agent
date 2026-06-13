@@ -56,16 +56,15 @@ def upgrade() -> None:
     op.create_index(op.f('ix_profiles_user_id'), 'profiles', ['user_id'])
 
     op.create_table(
-        'chat_messages',
+        'agent_messages',
         sa.Column('id', sa.UUID(), nullable=False),
         sa.Column('user_id', sa.UUID(), nullable=False),
-        sa.Column('role', sa.String(length=16), nullable=False),
-        sa.Column('content', sa.Text(), nullable=False),
+        sa.Column('data', sa.Text(), nullable=False),
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'),
     )
-    op.create_index(op.f('ix_chat_messages_user_id'), 'chat_messages', ['user_id'])
+    op.create_index(op.f('ix_agent_messages_user_id'), 'agent_messages', ['user_id'])
 
     op.create_table(
         'feed_items',
@@ -91,8 +90,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index(op.f('ix_feed_items_user_id'), table_name='feed_items')
     op.drop_table('feed_items')
-    op.drop_index(op.f('ix_chat_messages_user_id'), table_name='chat_messages')
-    op.drop_table('chat_messages')
+    op.drop_index(op.f('ix_agent_messages_user_id'), table_name='agent_messages')
+    op.drop_table('agent_messages')
     op.drop_index(op.f('ix_profiles_user_id'), table_name='profiles')
     op.drop_table('profiles')
     op.drop_index(op.f('ix_connections_user_id'), table_name='connections')

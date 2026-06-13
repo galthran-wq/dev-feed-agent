@@ -89,18 +89,18 @@ Single surface: one `docker-compose.yaml`. The client image copies its build int
 ### Agent (`server/src/agent/`)
 
 - **pydantic-ai** agents over **OpenRouter** (OpenAI-compatible). No embeddings — relevance is judged by the LLM over the profile.
-- `prompts/` — system prompts as markdown files (`profile_builder.md`, `chat.md`, `feed_curator.md`).
-- `tools/` — pydantic-ai tool functions: `github_tools` (repos/starred/dependency scan), `feed_tools` (issue/repo search), `memory_tools` (read/patch profile, list already-shown).
+- `prompts/` — system prompts as markdown files (`profile_builder.md`, `chat.md`).
+- `tools/` — pydantic-ai tool functions: `github_tools` (repos/starred/dependency scan), `feed_tools` (issue/repo search), `memory_tools` (read/patch profile, list already-shown, `record_feed_items`).
 - `mcp.py` — builds MCP toolsets (HuggingFace remote HTTP + the three gateway containers); each source is opt-in by config.
-- `agents.py` — per-run agent factories (`make_profile_agent` / `make_chat_agent` / `make_curator_agent`) + the `FeedOutput` curation schema. A fresh `Agent` per run; MCP connections open inside `async with agent`.
-- `runtime.py` — `build_profile` (explore sub-agent), `chat` (memory-aware), `curate_feed` (explore/exploit mix, dedup, record). `build_profile_safe` runs in the background on first connect / `/init`.
-- Memory: the **profile** is a sectioned markdown doc the agent self-edits via `update_profile_section`; `feed_items` is the dedup ledger of what's been shown; `chat_messages` is conversation memory.
+- `agents.py` — per-run agent factories (`make_profile_agent`, `make_chat_agent`). One `make_chat_agent` serves **both** Telegram chat and the scheduled feed. A fresh `Agent` per run; MCP connections open inside `async with agent`.
+- `runtime.py` — `build_profile` (explore sub-agent), `chat`, and `curate_feed` (a synthetic "assemble the feed" turn). Chat and feed run through the same agent and share one persisted message history. The feed is **free-form text** (no structured schema); the agent records what it surfaces via `record_feed_items`. `build_profile_safe` runs in the background on first connect / `/init`.
+- Memory: the **profile** is a sectioned markdown doc the agent self-edits via `update_profile_section`; `agent_messages` stores the structured pydantic-ai message history (tool calls/results included), replayed via `message_history=`; `feed_items` is the dedup ledger of what's been shown.
 
 ### Services (`server/src/services/`)
 
 - `feed.py` — one per-user pass: `curate_feed` → deliver to Telegram → mark fed (error-contained).
 - `scheduler.py` — APScheduler hourly job over all feedable connections, fresh session per user, never raises.
-- `telegram_bot.py` (aiogram) — `/start <code>` links a chat, `/init` rebuilds the profile, free text → `runtime.chat`. `notifier.py` formats + sends feed items. Both opt-in via `TELEGRAM_BOT_TOKEN`.
+- `telegram_bot.py` (aiogram) — `/start <code>` links a chat, `/init` rebuilds the profile, free text → `runtime.chat`. `notifier.py` sends the free-form digest as plain, chunked text. Both opt-in via `TELEGRAM_BOT_TOKEN`.
 
 ### Frontend (`client/`)
 

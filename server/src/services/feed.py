@@ -33,19 +33,18 @@ async def run_for_user(session: AsyncSession, conn: ConnectionModel, *, deliver:
     if not await ProfileRepository(session).is_built(conn.user_id):
         return FeedResult(0, 0, "profile not built yet")
 
-    items = await runtime.curate_feed(session, user)
+    digest, new_items = await runtime.curate_feed(session, user)
     await ConnectionRepository(session).mark_fed(conn)
-    if not items:
+    if new_items == 0:
         return FeedResult(0, 0, "no new matches")
 
     delivered = 0
     if deliver and conn.telegram_chat_id and settings.telegram_enabled:
-        for item in items:
-            try:
-                await notifier.send_text(conn.telegram_chat_id, notifier.format_feed_item(item))
-                delivered += 1
-            except Exception as exc:  # never let one delivery failure abort the feed
-                log.warning("feed_delivery_failed", error=str(exc))
+        try:
+            await notifier.send_text(conn.telegram_chat_id, digest)
+            delivered = new_items
+        except Exception as exc:  # delivery failure must not abort the pass
+            log.warning("feed_delivery_failed", error=str(exc))
 
-    log.info("feed_pass_done", curated=len(items), delivered=delivered)
-    return FeedResult(delivered, len(items))
+    log.info("feed_pass_done", curated=new_items, delivered=delivered)
+    return FeedResult(delivered, new_items)
