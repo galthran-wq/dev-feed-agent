@@ -25,7 +25,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !isAuthRequest) {
       const auth = useAuthStore()
       auth.logout()
-      router.push('/login')
+      router.push('/')
     }
     return Promise.reject(error)
   },

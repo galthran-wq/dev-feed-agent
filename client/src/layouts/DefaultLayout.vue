@@ -7,16 +7,15 @@ const router = useRouter()
 
 function handleLogout() {
   auth.logout()
-  router.push('/login')
+  router.push('/')
 }
 </script>
 
 <template>
   <div class="layout">
     <header v-if="auth.isAuthenticated" class="navbar">
-      <RouterLink to="/dashboard" class="brand">{{ 'WebApp' }}</RouterLink>
+      <RouterLink to="/connected" class="brand">dev-feed-agent</RouterLink>
       <nav>
-        <RouterLink to="/dashboard">Dashboard</RouterLink>
         <button class="logout-btn" @click="handleLogout">Logout</button>
       </nav>
     </header>

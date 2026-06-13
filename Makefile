@@ -1,115 +1,70 @@
-.PHONY: dev-up dev-down dev-ps dev-logs dev-restart dev-db dev-make-migrations dev-test-db dev-test-migrate dev-test dev-lint dev-format dev-shell setup prod-up prod-down prod-ps prod-logs prod-restart prod-build
+.PHONY: setup build up down ps logs mcp-logs restart db shell make-migrations migrate test lint format superuser user
 .SILENT:
 
--include .env.dev
+-include .env
 export
+COMPOSE := docker compose -p $(or $(COMPOSE_PROJECT_NAME),dev-feed-agent)
 ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 $(ARGS):
 	@true
 
 setup:
-	@test -f .env.dev || (cp .env.dev.example .env.dev && echo "Created .env.dev from .env.dev.example")
-	@test -f .env.prod || (cp .env.prod.example .env.prod && echo "Created .env.prod from .env.prod.example")
-	@echo "Environment files ready."
+	@test -f .env || (cp .env.example .env && echo "Created .env from .env.example")
+	@echo "Environment ready. Edit .env, then run: make build && make up"
 
-dev-up:
-	docker compose -p $(COMPOSE_PROJECT_NAME_DEV) --env-file .env.dev -f docker-compose.yaml -f docker-compose.dev.yaml up -d $(ARGS)
+build:
+	$(COMPOSE) build $(ARGS)
 
-dev-down:
-	docker compose -p $(COMPOSE_PROJECT_NAME_DEV) down $(ARGS)
+up:
+	$(COMPOSE) up -d $(ARGS)
 
-dev-ps:
-	docker compose -p $(COMPOSE_PROJECT_NAME_DEV) ps $(ARGS)
+down:
+	$(COMPOSE) down $(ARGS)
 
-dev-logs:
-	docker compose -p $(COMPOSE_PROJECT_NAME_DEV) logs -f $(ARGS)
+ps:
+	$(COMPOSE) ps $(ARGS)
 
-dev-restart:
-	docker compose -p $(COMPOSE_PROJECT_NAME_DEV) restart $(ARGS)
+logs:
+	$(COMPOSE) logs -f $(ARGS)
 
-dev-build:
-	docker compose -p $(COMPOSE_PROJECT_NAME_DEV) build $(ARGS)
+mcp-logs:
+	$(COMPOSE) logs -f mcp-hn mcp-arxiv mcp-reddit
 
-dev-db:
-	docker compose -p $(COMPOSE_PROJECT_NAME_DEV) exec postgres psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
+restart:
+	$(COMPOSE) restart $(ARGS)
 
-dev-make-migrations:
-	docker compose -p $(COMPOSE_PROJECT_NAME_DEV) exec server bash -lc "python -m alembic revision --autogenerate -m '$(ARGS)'"
+db:
+	$(COMPOSE) exec postgres psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
 
-dev-test-db:
-	docker compose -p $(COMPOSE_PROJECT_NAME_DEV) exec postgres createdb -U $(POSTGRES_USER) $(POSTGRES_DB)_test || true
+shell:
+	$(COMPOSE) exec server bash
 
-dev-test-migrate:
-	docker compose -p $(COMPOSE_PROJECT_NAME_DEV) exec -e POSTGRES_DB=$(POSTGRES_DB)_test -e PYTHONPATH=/app server bash -lc "alembic upgrade head"
+make-migrations:
+	$(COMPOSE) exec server bash -lc "alembic revision --autogenerate -m '$(ARGS)'"
 
-dev-test:
-	docker compose -p $(COMPOSE_PROJECT_NAME_DEV) exec -e POSTGRES_DB=$(POSTGRES_DB)_test -e PYTHONPATH=/app server bash -lc "pytest tests/ -v $(ARGS)"
+migrate:
+	$(COMPOSE) exec server bash -lc "alembic upgrade head"
 
-dev-lint:
-	docker compose -p $(COMPOSE_PROJECT_NAME_DEV) exec server bash -lc "ruff check src tests && ruff format --check src tests && mypy src"
+# Tests + checks run locally (conftest uses in-memory SQLite — no DB needed).
+test:
+	cd server && uv run pytest tests/ $(ARGS)
 
-dev-format:
-	docker compose -p $(COMPOSE_PROJECT_NAME_DEV) exec server bash -lc "ruff format src tests && ruff check --fix src tests"
+lint:
+	cd server && uv run ruff check src tests && uv run ruff format --check src tests && uv run mypy src
 
-dev-shell:
-	docker compose -p $(COMPOSE_PROJECT_NAME_DEV) exec server bash
+format:
+	cd server && uv run ruff format src tests && uv run ruff check --fix src tests
 
-dev-superuser:
+superuser:
 	@if [ -z "$(ARGS)" ]; then \
-		echo "Usage: make dev-superuser <email_or_uuid|--list|--help>"; \
-		echo "Examples:"; \
-		echo "  make dev-superuser --list"; \
-		echo "  make dev-superuser admin@example.com"; \
-		echo "  make dev-superuser --help"; \
+		echo "Usage: make superuser <email_or_uuid|--list|--help>"; \
 	else \
-		docker compose -p $(COMPOSE_PROJECT_NAME_DEV) --env-file .env.dev -f docker-compose.yaml -f docker-compose.dev.yaml exec -w /app server python scripts/make_superuser.py $(ARGS); \
+		$(COMPOSE) exec -w /app server python scripts/make_superuser.py $(ARGS); \
 	fi
 
-dev-user:
+user:
 	@if [ -z "$(word 1,$(ARGS))" ] || [ -z "$(word 2,$(ARGS))" ]; then \
-		echo "Usage: make dev-user <email> <password>"; \
-		echo "Examples:"; \
-		echo "  make dev-user user@example.com mypassword"; \
-		echo "  make dev-user --help                        # Show help"; \
+		echo "Usage: make user <email> <password>"; \
 	else \
-		docker compose -p $(COMPOSE_PROJECT_NAME_DEV) --env-file .env.dev -f docker-compose.yaml -f docker-compose.dev.yaml exec -w /app server python scripts/create_user.py $(ARGS); \
-	fi
-
-prod-up:
-	docker compose -p $(COMPOSE_PROJECT_NAME_PROD) --env-file .env.prod -f docker-compose.yaml -f docker-compose.prod.yaml up -d $(ARGS)
-
-prod-down:
-	docker compose -p $(COMPOSE_PROJECT_NAME_PROD) down $(ARGS)
-
-prod-ps:
-	docker compose -p $(COMPOSE_PROJECT_NAME_PROD) ps $(ARGS)
-
-prod-logs:
-	docker compose -p $(COMPOSE_PROJECT_NAME_PROD) logs -f $(ARGS)
-
-prod-restart:
-	docker compose -p $(COMPOSE_PROJECT_NAME_PROD) restart $(ARGS)
-
-prod-build:
-	docker compose -p $(COMPOSE_PROJECT_NAME_PROD) build $(ARGS)
-
-prod-superuser:
-	@if [ -z "$(ARGS)" ]; then \
-		echo "Usage: make prod-superuser <email_or_uuid|--list|--help>"; \
-		echo "Examples:"; \
-		echo "  make prod-superuser --list"; \
-		echo "  make prod-superuser admin@example.com"; \
-		echo "  make prod-superuser --help"; \
-	else \
-		docker compose -p $(COMPOSE_PROJECT_NAME_PROD) --env-file .env.prod -f docker-compose.yaml -f docker-compose.prod.yaml exec -w /app server python scripts/make_superuser.py $(ARGS); \
-	fi
-
-prod-user:
-	@if [ -z "$(word 1,$(ARGS))" ] || [ -z "$(word 2,$(ARGS))" ]; then \
-		echo "Usage: make prod-user <email> <password>"; \
-		echo "Examples:"; \
-		echo "  make prod-user user@example.com mypassword"; \
-		echo "  make prod-user --help                        # Show help"; \
-	else \
-		docker compose -p $(COMPOSE_PROJECT_NAME_PROD) --env-file .env.prod -f docker-compose.yaml -f docker-compose.prod.yaml exec -w /app server python scripts/create_user.py $(ARGS); \
+		$(COMPOSE) exec -w /app server python scripts/create_user.py $(ARGS); \
 	fi

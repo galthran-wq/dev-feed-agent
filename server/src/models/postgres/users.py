@@ -15,3 +15,10 @@ class UserModel(Base):
     is_verified: Mapped[bool] = mapped_column(default=False)
     is_superuser: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
+
+    # --- GitHub OAuth identity (populated on "Connect via GitHub") ---
+    github_id: Mapped[str | None] = mapped_column(String, unique=True, default=None)
+    github_username: Mapped[str | None] = mapped_column(String, default=None)
+    # OAuth access token, stored as-is; treat as a secret. Used for GitHub API calls.
+    github_access_token: Mapped[str | None] = mapped_column(String, default=None)
+    avatar_url: Mapped[str | None] = mapped_column(String, default=None)
