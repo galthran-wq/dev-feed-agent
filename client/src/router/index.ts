@@ -6,7 +6,13 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/dashboard',
+      redirect: '/agent',
+    },
+    {
+      path: '/agent',
+      name: 'agent',
+      component: () => import('@/views/AgentView.vue'),
+      meta: { requiresAuth: true },
     },
     {
       path: '/login',

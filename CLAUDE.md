@@ -91,6 +91,16 @@ Dev uses `docker-compose.yaml` + `docker-compose.dev.yaml`. Prod uses `docker-co
 - Middleware: `src/core/middleware.py` — CORS (outermost), then request logging, then request ID (innermost)
 - Container startup: `startup.sh` runs `alembic upgrade head` then starts uvicorn
 
+### Discovery Agent (`server/src/services/`)
+
+Multi-user good-first-issue discovery agent layered on top of the template:
+
+- **Services**: `github_service.py` (PyGithub, rate-limit aware, runs sync calls via `asyncio.to_thread`), `agent_service.py` (pydantic-ai agents over OpenRouter — interest build, chat refine, issue scoring; **no embeddings**, LLM-judged relevance), `interest_service.py` (shared build/refine used by web + bot), `discovery_service.py` (per-user poll → score → dedup → deliver), `notifier.py` + `telegram_bot.py` (aiogram delivery + `/start` linking + chat), `scheduler.py` (APScheduler hourly job, error-contained, never raises)
+- **Models** (`models/postgres/`): `GithubProfileModel` (GitHub + Telegram link settings), `InterestProfileModel` (durable interest "memory"), `ChatMessageModel` (conversation memory), `SentIssueModel` (dedup, unique per `(user_id, issue_id)`)
+- **API**: `api/endpoints/agent.py` under `/api/agent/*`, all `Depends(get_current_user)`
+- **Lifespan**: `main.py` starts the scheduler + Telegram bot — only when `settings.agent_enabled` / `settings.telegram_enabled` (i.e. the respective keys are set)
+- **Frontend**: `client/src/views/AgentView.vue` + `client/src/api/agent.ts`
+
 ### Frontend (`client/`)
 
 - **Vue 3.5** (Composition API, `<script setup>`), TypeScript, Vite 7, Pinia 3, Vue Router 4

@@ -14,8 +14,9 @@ function handleLogout() {
 <template>
   <div class="layout">
     <header v-if="auth.isAuthenticated" class="navbar">
-      <RouterLink to="/dashboard" class="brand">{{ 'WebApp' }}</RouterLink>
+      <RouterLink to="/agent" class="brand">{{ 'GFI Agent' }}</RouterLink>
       <nav>
+        <RouterLink to="/agent">Agent</RouterLink>
         <RouterLink to="/dashboard">Dashboard</RouterLink>
         <button class="logout-btn" @click="handleLogout">Logout</button>
       </nav>

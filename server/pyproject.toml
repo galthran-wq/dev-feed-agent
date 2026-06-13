@@ -17,6 +17,10 @@ dependencies = [
     "email-validator>=2.1.0",
     "structlog>=24.4.0",
     "prometheus-fastapi-instrumentator>=7.0.0",
+    "pydantic-ai-slim[openai]>=1.0.0",
+    "pygithub>=2.5.0",
+    "apscheduler>=3.11.0",
+    "aiogram>=3.13.0",
 ]
 
 [dependency-groups]
@@ -51,7 +55,7 @@ explicit_package_bases = true
 mypy_path = "."
 
 [[tool.mypy.overrides]]
-module = ["jose.*", "passlib.*"]
+module = ["jose.*", "passlib.*", "github.*", "aiogram.*", "apscheduler.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

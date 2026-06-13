@@ -74,6 +74,55 @@ No implicit loading — each environment explicitly composes its files via the M
 - **Python**: ruff (line-length=120), mypy strict mode, type-annotated
 - **TypeScript/Vue**: ESLint + Prettier (no semicolons, single quotes, 100 char width)
 
+## GitHub Good-First-Issue Discovery Agent
+
+A multi-user agent that learns each user's interests from their GitHub activity and
+delivers matching newly-opened **good-first-issues** to Telegram.
+
+### How it works
+
+1. **Connect** — each user sets their GitHub username (and optionally a token to lift
+   rate limits) in the web UI, and links a Telegram chat via a one-tap deep link.
+2. **Interest profile** — `Rebuild from GitHub activity` fetches starred + owned repos
+   (languages, topics, descriptions) and a pydantic-ai agent distills them into a
+   stored interest profile. No embeddings — the LLM reasons about relevance directly.
+3. **Refine by chat** — users chat with the agent (web or Telegram) to add/remove
+   interests. Conversation + profile are persisted per user (durable memory).
+4. **Discovery** — an hourly APScheduler job searches the GitHub Search API for open,
+   unassigned `good first issue` tickets created since the last poll, the agent scores
+   each against the user's profile, and the top matches above `RELEVANCE_THRESHOLD` are
+   delivered to Telegram. Sent issues are recorded in Postgres so none is sent twice.
+
+Errors are contained at every layer: a failure for one user never aborts the others,
+and the scheduled job never raises. The agent and scheduler are **disabled** unless
+`OPENROUTER_API_KEY` is set; delivery is disabled unless `TELEGRAM_BOT_TOKEN` is set.
+
+### Components
+
+| Layer | Location |
+|-------|----------|
+| GitHub client (PyGithub, rate-limit aware) | `server/src/services/github_service.py` |
+| pydantic-ai agent (OpenRouter) | `server/src/services/agent_service.py` |
+| Interest build/refine | `server/src/services/interest_service.py` |
+| Discovery orchestration | `server/src/services/discovery_service.py` |
+| Telegram delivery + bot | `server/src/services/notifier.py`, `telegram_bot.py` |
+| Hourly scheduler | `server/src/services/scheduler.py` |
+| REST API (`/api/agent/*`) | `server/src/api/endpoints/agent.py` |
+| Web UI | `client/src/views/AgentView.vue` |
+
+### Configuration
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `OPENROUTER_API_KEY` | *(empty → agent off)* | OpenRouter key for the LLM agent |
+| `AGENT_MODEL` | `anthropic/claude-3.7-sonnet` | OpenRouter model slug |
+| `TELEGRAM_BOT_TOKEN` | *(empty → delivery off)* | Bot token for delivery + chat |
+| `TELEGRAM_BOT_USERNAME` | — | Bot @handle, used for the deep link |
+| `POLL_INTERVAL_MINUTES` | `60` | Scheduler interval |
+| `MAX_ISSUES_PER_POLL` | `100` | Search results scanned per poll |
+| `MAX_MATCHES_PER_USER` | `5` | Top matches delivered per poll |
+| `RELEVANCE_THRESHOLD` | `0.75` | Min agent relevance (0–1) to deliver |
+
 ## Commands
 
 All commands are in the Makefile. Dev uses `make dev-*`, prod uses `make prod-*`.
