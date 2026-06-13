@@ -59,7 +59,7 @@ nginx (reverse proxy, :5746)
          ├── agent (pydantic-ai via OpenRouter)
          │     ├── GitHub tools (repos, deps, issue/repo search)
          │     └── MCP toolsets ── HuggingFace (remote HTTP)
-         │                      └── mcp-hn / mcp-arxiv / mcp-reddit  (gateway containers)
+         │                      └── mcp-hn / mcp-arxiv / mcp-reddit / mcp-perplexity (gateway containers; Perplexity opt-in)
          ├── APScheduler (hourly feed)   └── aiogram Telegram bot
 ```
 
@@ -70,6 +70,7 @@ nginx (reverse proxy, :5746)
 | **postgres** | Users, connections, profiles, agent message history, feed-item ledger |
 | **nginx** | Reverse proxy, serves the built SPA |
 | **mcp-hn / mcp-arxiv / mcp-reddit** | `supergateway` wrapping each stdio MCP server as HTTP |
+| **mcp-perplexity** | Optional web-grounded source (`@perplexity-ai/mcp-server` via `supergateway`); opt-in, API-key-gated |
 | **prometheus / grafana** | Metrics + dashboards |
 
 ### Backend layout (`server/src/`)
@@ -90,4 +91,16 @@ nginx (reverse proxy, :5746)
 | `AGENT_MODEL` / `PROFILE_BUILDER_MODEL` | OpenRouter model slugs |
 | `TELEGRAM_BOT_TOKEN` / `_USERNAME` | Telegram delivery + deep link |
 | `HF_TOKEN`, `MCP_*_URL` | MCP feed sources (per-source opt-in) |
+| `PERPLEXITY_API_KEY`, `MCP_PERPLEXITY_URL` | Optional web-grounded Perplexity source (opt-in, cost-aware) |
 | `FEED_SIZE`, `EXPLORE_RATIO`, `POLL_INTERVAL_MINUTES` | Feed tuning |
+
+### Optional Perplexity source
+
+Perplexity adds web-grounded search/news to complement the developer-centric sources —
+mainly for explicit "go deeper" chat queries rather than every cron poll. It's **opt-in**
+and API-key-gated: leave `PERPLEXITY_API_KEY` / `MCP_PERPLEXITY_URL` unset and the agent
+simply skips it (no container required to run the app). To enable, set `PERPLEXITY_API_KEY`
+(handed to the `mcp-perplexity` gateway, which wraps the official `@perplexity-ai/mcp-server`
+stdio server via `supergateway`) and `MCP_PERPLEXITY_URL=http://mcp-perplexity:8000/mcp`.
+Like every feed source, Perplexity returns external/untrusted content — the same
+prompt-injection caveat applies (returned text is data, never instructions).

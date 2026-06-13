@@ -125,6 +125,23 @@ services:
       - app-network
     restart: unless-stopped
 
+  # Optional, API-key-gated web-grounded source (the official @perplexity-ai/mcp-server).
+  # Opt-in & cost-aware: the agent only wires it when MCP_PERPLEXITY_URL is set (skipped
+  # otherwise), so if you don't want Perplexity, leave PERPLEXITY_API_KEY / MCP_PERPLEXITY_URL
+  # empty — this container will still start but is simply never reached by the agent (you may
+  # also remove this service entirely). PERPLEXITY_API_KEY is read from .env and handed to the
+  # stdio child; nothing else passes a Perplexity credential.
+  mcp-perplexity:
+    image: dev-feed-mcp-gateway:latest
+    build:
+      context: ./deploy/mcp
+    environment:
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+    command: ["sh", "-lc", "npx -y supergateway@3.4.3 --stdio \"npx -y @perplexity-ai/mcp-server\" --outputTransport streamableHttp --port 8000 --streamableHttpPath /mcp"]
+    networks:
+      - app-network
+    restart: unless-stopped
+
 networks:
   app-network:
     driver: bridge

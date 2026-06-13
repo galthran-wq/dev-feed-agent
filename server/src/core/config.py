@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     mcp_hn_url: str = ""
     mcp_arxiv_url: str = ""
     mcp_reddit_url: str = ""
+    # Perplexity is an optional, API-key-gated web-grounded source (the official
+    # @perplexity-ai/mcp-server, a stdio server re-exposed via the mcp-perplexity gateway
+    # container). Cost-aware: meant mainly for explicit "go deeper" chat queries. Opt-in —
+    # skipped unless its gateway URL is configured.
+    mcp_perplexity_url: str = ""
+    perplexity_api_key: str = ""
     # Seconds to wait when probing each MCP source before a run; unreachable sources are
     # dropped (logged) instead of aborting the whole run. Probes run concurrently.
     mcp_probe_timeout: float = 5.0
@@ -66,6 +72,12 @@ class Settings(BaseSettings):
     @property
     def telegram_enabled(self) -> bool:
         return bool(self.telegram_bot_token)
+
+    @property
+    def perplexity_enabled(self) -> bool:
+        # The gateway URL is the source of truth (the key is injected into the gateway
+        # container, not used by the agent directly); skip the source unless it's set.
+        return bool(self.mcp_perplexity_url)
 
     @property
     def github_oauth_enabled(self) -> bool:
