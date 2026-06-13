@@ -69,6 +69,11 @@ async def reachable_mcp_servers(
     Probes run concurrently, so added latency is ~``mcp_probe_timeout`` worst case, not
     the sum across sources. An all-unreachable set yields ``[]`` (the agent simply runs
     without MCP tools) instead of raising.
+
+    Caveat: this is a probe-then-use check, so a source that passes the probe but dies in
+    the brief window before the agent re-opens it can still abort that run; the window is
+    small and the alternative (a tolerant toolset wrapper) needs upstream support. Each
+    healthy source also pays two connect+handshakes per run (probe + real open).
     """
     if servers is None:
         servers = build_mcp_servers()
