@@ -30,6 +30,8 @@ class ConnectionModel(Base):
 
     feed_enabled: Mapped[bool] = mapped_column(default=True)
     last_feed_at: Mapped[datetime | None] = mapped_column(default=None)
+    # When the interest-profile was last (re)built — gates the /rebuild cooldown.
+    last_profile_build_at: Mapped[datetime | None] = mapped_column(default=None)
 
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))

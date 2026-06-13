@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     # Token budget for replayed agent conversation history (the rest is trimmed oldest-first).
     agent_history_token_budget: int = 12000
 
+    # --- Per-user cooldowns for the manual triggers (return 429 within the window) ---
+    poll_now_cooldown_seconds: int = 300
+    rebuild_cooldown_seconds: int = 600
+
     @property
     def agent_enabled(self) -> bool:
         return bool(self.openrouter_api_key)

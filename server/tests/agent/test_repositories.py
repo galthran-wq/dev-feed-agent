@@ -113,6 +113,19 @@ async def test_agent_message_reset_and_compact(db_session: AsyncSession) -> None
     assert "User likes Rust" in collapsed[0].parts[0].content
 
 
+async def test_mark_profile_build_started_stamps_timestamp(db_session: AsyncSession) -> None:
+    repo = ConnectionRepository(db_session)
+    conn = await repo.get_or_create(uuid4())
+    assert conn.last_profile_build_at is None
+
+    await repo.mark_profile_build_started(conn)
+    assert conn.last_profile_build_at is not None
+    # The stamp was committed and survives a reload.
+    reloaded = await repo.get_by_user_id(conn.user_id)
+    assert reloaded is not None
+    assert reloaded.last_profile_build_at is not None
+
+
 async def test_telegram_link_is_single_use_and_no_hijack(db_session: AsyncSession) -> None:
     repo = ConnectionRepository(db_session)
     conn = await repo.get_or_create(uuid4())

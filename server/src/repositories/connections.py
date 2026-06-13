@@ -60,6 +60,11 @@ class ConnectionRepository:
         conn.last_feed_at = datetime.now(UTC)
         await self.session.commit()
 
+    async def mark_profile_build_started(self, conn: ConnectionModel) -> None:
+        """Stamp the start of a profile (re)build — drives the /rebuild cooldown."""
+        conn.last_profile_build_at = datetime.now(UTC)
+        await self.session.commit()
+
     async def list_feedable(self) -> list[ConnectionModel]:
         """Connections eligible for the scheduled feed: enabled, with a linked Telegram chat."""
         result = await self.session.execute(
