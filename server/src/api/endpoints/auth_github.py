@@ -60,8 +60,9 @@ async def github_callback(
         raise AppError(status_code=503, detail="GitHub OAuth is not configured")
 
     # Browser binding (anti-CSRF) first, then the standalone signature/expiry check
-    # (defense in depth). On any rejection we still clear the cookie so it can't be
-    # replayed.
+    # (defense in depth). A rejected attempt leaves the cookie in place, but it is
+    # path-scoped, short-lived, and single-use-by-binding, so it can't be replayed;
+    # the cookie is actively cleared on the success path below.
     cookie = request.cookies.get(github_oauth.STATE_COOKIE_NAME)
     if not github_oauth.state_matches_cookie(state, cookie) or not github_oauth.verify_state(state):
         logger.warning("github_oauth_state_rejected", has_cookie=bool(cookie))
