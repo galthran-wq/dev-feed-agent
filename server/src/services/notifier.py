@@ -27,22 +27,26 @@ def get_bot() -> Any:
 
 
 def _chunks(text: str, limit: int = _TELEGRAM_LIMIT) -> list[str]:
-    """Split text into <=limit pieces, preferring line boundaries."""
+    """Split text into <=limit pieces, preferring line boundaries.
+
+    Uses a None sentinel for "empty buffer" so blank lines are preserved (an empty
+    string is falsy but is real content — dropping it would merge paragraphs).
+    """
     out: list[str] = []
-    buf = ""
+    buf: str | None = None
     for line in text.split("\n"):
-        candidate = f"{buf}\n{line}" if buf else line
+        candidate = line if buf is None else f"{buf}\n{line}"
         if len(candidate) <= limit:
             buf = candidate
             continue
-        if buf:
+        if buf is not None:
             out.append(buf)
         # A single line longer than the limit is hard-split.
         while len(line) > limit:
             out.append(line[:limit])
             line = line[limit:]
         buf = line
-    if buf:
+    if buf is not None:
         out.append(buf)
     return out or [""]
 

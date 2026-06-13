@@ -89,6 +89,8 @@ async def record_feed_items(ctx: RunContext[AgentDeps], items: list[ShownItem]) 
         except Exception as exc:  # unique race / bad data — skip, keep going
             await ctx.deps.session.rollback()
             logger.warning("record_feed_item_failed", error=str(exc))
+    # Authoritative per-run tally the feed pass reads back (see runtime.curate_feed).
+    ctx.deps.recorded.extend(recorded)
     return json.dumps({"recorded": recorded, "skipped_already_seen": len(items) - len(recorded)}, ensure_ascii=False)
 
 

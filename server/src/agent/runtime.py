@@ -16,7 +16,6 @@ from src.core.database import AsyncSessionLocal
 from src.core.exceptions import AppError
 from src.models.postgres.users import UserModel
 from src.repositories.agent_messages import AgentMessageRepository
-from src.repositories.feed_items import FeedItemRepository
 from src.repositories.profiles import ProfileRepository
 from src.repositories.users import UserRepository
 
@@ -85,29 +84,36 @@ async def curate_feed(session: AsyncSession, user: UserModel) -> tuple[str, int]
     records what it surfaces via the record_feed_items tool, which is the dedup ledger.
     """
     _require_agent()
-    feed_repo = FeedItemRepository(session)
-    before = await feed_repo.count(user.id)
+    profile_md = await ProfileRepository(session).get_markdown(user.id)
 
     explore_n = round(settings.feed_size * settings.explore_ratio)
     exploit_n = max(settings.feed_size - explore_n, 0)
     prompt = (
-        "It's time to assemble this user's scheduled feed. Gather fresh, relevant items across "
-        "your sources (GitHub issues/repos, HuggingFace, Hacker News, arXiv, Reddit). Aim for about "
+        "It's time to assemble this user's scheduled feed.\n\n"
+        f"Their interest profile:\n{profile_md}\n\n"
+        "Gather fresh, relevant items across your sources (GitHub issues/repos, HuggingFace, "
+        "Hacker News, arXiv, Reddit). Aim for about "
         f"{exploit_n} 'exploit' items (squarely their interests) and {explore_n} 'explore' items "
         "(adjacent new horizons). First check what was already shown and skip it. Record everything "
-        "you decide to surface with record_feed_items, then write a concise, friendly digest of "
-        "those items with links. If nothing new is worth sending, record nothing and reply with a "
-        "short 'nothing new' note."
+        "you decide to surface with record_feed_items, then write a concise, friendly plain-text "
+        "digest of those items with links. If nothing new is worth sending, record nothing and "
+        "reply with a short 'nothing new' note."
     )
 
     msg_repo = AgentMessageRepository(session)
     history = await msg_repo.load(user.id)
 
     agent = agents.make_chat_agent()
+    deps = _deps(session, user)
     async with agent:
-        result = await agent.run(prompt, message_history=history, deps=_deps(session, user))
+        result = await agent.run(prompt, message_history=history, deps=deps)
 
     await msg_repo.append(user.id, result.new_messages_json())
-    new_items = await feed_repo.count(user.id) - before
+    # `recorded` is the authoritative tally of what the agent surfaced this run.
+    new_items = len(deps.recorded)
+    if new_items == 0 and len(result.output.strip()) > 80:
+        # A substantive digest but nothing recorded usually means a skipped record_feed_items
+        # call — surface it rather than silently dropping the feed.
+        logger.warning("feed_digest_without_record", user_id=str(user.id))
     logger.info("feed_curated", user_id=str(user.id), new_items=new_items)
     return result.output, new_items
