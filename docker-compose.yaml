@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15-alpine
@@ -12,33 +10,61 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    ports:
+      - "${POSTGRES_PORT_HOST:-5444}:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
     networks:
       - app-network
+    restart: unless-stopped
 
   server:
     build:
       context: ./server
       dockerfile: Dockerfile
+    env_file:
+      - .env
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - app-network
+    restart: unless-stopped
 
   client:
     build:
       context: ./client
       dockerfile: Dockerfile
+    # Build once, hand the static bundle to the nginx reverse proxy via a shared volume.
+    command: ["sh", "-c", "rm -rf /shared/* && cp -r /usr/share/nginx/html/* /shared/ && tail -f /dev/null"]
+    volumes:
+      - client_build:/shared
+    healthcheck:
+      # Mark healthy only once the static bundle is in the shared volume, so nginx
+      # never serves an empty directory on a cold start.
+      test: ["CMD-SHELL", "test -f /shared/index.html"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
     networks:
       - app-network
+    restart: unless-stopped
 
   nginx:
     image: nginx:alpine
     depends_on:
-      - server
-      - client
+      server:
+        condition: service_started
+      client:
+        condition: service_healthy
+    ports:
+      - "${HTTP_PORT:-5746}:80"
+    volumes:
+      - client_build:/usr/share/nginx/html:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     networks:
       - app-network
+    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:v3.3.0
@@ -48,18 +74,62 @@ services:
       - '--web.console.libraries=/etc/prometheus/console_libraries'
       - '--web.console.templates=/etc/prometheus/consoles'
       - '--web.enable-lifecycle'
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
     networks:
       - app-network
+    restart: unless-stopped
 
   grafana:
     image: grafana/grafana:11.5.2
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SERVER_ROOT_URL=${APP_BASE_URL:-http://localhost:5746}/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
     depends_on:
       - prometheus
     networks:
       - app-network
+    restart: unless-stopped
+
+  # --- MCP feed-source gateways (stdio servers re-exposed as streamable HTTP) ---
+  # The agent connects to these at http://<service>:8000/mcp. Internal only.
+  mcp-hn:
+    build:
+      context: ./deploy/mcp
+    image: dev-feed-mcp-gateway:latest
+    command: ["sh", "-lc", "npx -y supergateway@3.4.3 --stdio \"npx -y hn-mcp\" --outputTransport streamableHttp --port 8000 --streamableHttpPath /mcp"]
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  mcp-arxiv:
+    image: dev-feed-mcp-gateway:latest
+    build:
+      context: ./deploy/mcp
+    command: ["sh", "-lc", "npx -y supergateway@3.4.3 --stdio \"uvx arxiv-mcp-server\" --outputTransport streamableHttp --port 8000 --streamableHttpPath /mcp"]
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  mcp-reddit:
+    image: dev-feed-mcp-gateway:latest
+    build:
+      context: ./deploy/mcp
+    command: ["sh", "-lc", "npx -y supergateway@3.4.3 --stdio \"npx -y reddit-mcp-server\" --outputTransport streamableHttp --port 8000 --streamableHttpPath /mcp"]
+    networks:
+      - app-network
+    restart: unless-stopped
 
 networks:
   app-network:
-    driver: bridge 
+    driver: bridge
+
+volumes:
+  client_build:
+  prometheus_data:
+  grafana_data:

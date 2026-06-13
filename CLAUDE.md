@@ -4,40 +4,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Full-stack web application template: FastAPI backend + Vue 3 frontend, orchestrated with Docker Compose. Includes Nginx reverse proxy, PostgreSQL, Prometheus metrics, and Grafana dashboards.
+**dev-feed-agent** — a personalized, agentic news feed for developers / ML engineers. Users sign in with GitHub (OAuth); an agent (pydantic-ai over OpenRouter) profiles their interests from their GitHub activity, then curates a feed across GitHub, HuggingFace, Hacker News, arXiv and Reddit (the latter four via MCP) and delivers it to Telegram. Built on a FastAPI + Vue 3 + PostgreSQL template with Nginx, Prometheus and Grafana.
 
 ## Common Commands
 
-All commands are in the Makefile. Development commands use `make dev-*`, production uses `make prod-*`. Extra args can be passed via `$(ARGS)`.
+A **single build-based surface** — one `docker-compose.yaml`, one `.env`, prefix-less `make` targets. Extra args via `$(ARGS)`.
 
-### Setup
+### Setup & run
 ```bash
-make setup               # Create .env files from examples (first-time setup)
-make dev-up              # Start all dev services (detached)
+make setup               # Create .env from .env.example (first-time setup)
+make build               # Build images (server, client, MCP gateways)
+make up                  # Start all services (detached)
+make down                # Stop services
+make logs [service]      # Tail logs (optionally one service)
+make mcp-logs            # Tail the MCP gateway containers
+make shell               # bash in the server container
+make db                  # psql in the postgres container
+make make-migrations "message"  # Autogenerate an Alembic migration (in container)
+make migrate             # alembic upgrade head (in container)
 ```
 
-### Development
+### Testing & checks (run locally via uv — conftest uses in-memory SQLite, no DB)
 ```bash
-make dev-up              # Start all dev services (detached)
-make dev-down            # Stop dev services
-make dev-logs            # Tail logs (add service name to filter: make dev-logs server)
-make dev-build           # Rebuild Docker images
-make dev-shell           # Open bash shell in server container
-make dev-db              # Open psql shell in postgres container
-make dev-make-migrations "message"  # Autogenerate Alembic migration
-make dev-lint            # Run ruff check + ruff format --check + mypy
-make dev-format          # Auto-fix with ruff format + ruff check --fix
+make test                # pytest (all tests)
+make test -k "test_name" # single test
+make lint                # ruff check + ruff format --check + mypy --strict
+make format              # ruff format + ruff check --fix
 ```
-
-### Testing
-```bash
-make dev-test-db         # Create test database (one-time setup)
-make dev-test-migrate    # Run Alembic migrations on test DB
-make dev-test            # Run pytest (all tests)
-make dev-test -k "test_name"  # Run a single test
-```
-
-Tests run against a separate `${POSTGRES_DB}_test` database. The test commands set `POSTGRES_DB` to the test DB and execute inside the server container. Tests can also run locally with `uv run pytest` (uses in-memory SQLite via conftest.py).
 
 ### Frontend
 ```bash
@@ -53,13 +46,14 @@ cd client && npm run format       # Prettier
 
 ### Services (Docker Compose)
 
-- **postgres** — PostgreSQL 15 (dev port: 5444)
-- **server** — FastAPI on uvicorn (internal :8000)
-- **client** — Vue 3 + Vite (internal :5173 in dev)
-- **nginx** — Reverse proxy (dev port: 5746)
+- **postgres** — PostgreSQL 15 (host port: `POSTGRES_PORT_HOST`, default 5444)
+- **server** — FastAPI on uvicorn (internal :8000); also runs the APScheduler feed job + Telegram bot
+- **client** — Vue 3; built to static and served by nginx (build-based, no dev server)
+- **nginx** — Reverse proxy + static SPA host (`HTTP_PORT`, default 5746)
+- **mcp-hn / mcp-arxiv / mcp-reddit** — `supergateway` wrapping each stdio MCP server as streamable HTTP (internal :8000, image `deploy/mcp/Dockerfile`)
 - **prometheus** / **grafana** — Monitoring stack
 
-Dev uses `docker-compose.yaml` + `docker-compose.dev.yaml`. Prod uses `docker-compose.yaml` + `docker-compose.prod.yaml`.
+Single surface: one `docker-compose.yaml`. The client image copies its build into a shared volume that nginx serves; the SPA falls back to `index.html` for deep links (e.g. `/auth/callback`).
 
 ### URL Routing (Nginx)
 
@@ -90,6 +84,23 @@ Dev uses `docker-compose.yaml` + `docker-compose.dev.yaml`. Prod uses `docker-co
 - Exceptions: `src/core/exceptions.py` — `AppError(status_code, detail)` for business logic errors
 - Middleware: `src/core/middleware.py` — CORS (outermost), then request logging, then request ID (innermost)
 - Container startup: `startup.sh` runs `alembic upgrade head` then starts uvicorn
+- Auth: GitHub OAuth is the primary sign-in (`src/services/github_oauth.py` + `src/api/endpoints/auth_github.py`); it mints the same JWT as the email/password flow. The GitHub access token is stored on `UserModel`.
+
+### Agent (`server/src/agent/`)
+
+- **pydantic-ai** agents over **OpenRouter** (OpenAI-compatible). No embeddings — relevance is judged by the LLM over the profile.
+- `prompts/` — system prompts as markdown files (`profile_builder.md`, `chat.md`).
+- `tools/` — pydantic-ai tool functions: `github_tools` (repos/starred/dependency scan), `feed_tools` (issue/repo search), `memory_tools` (read/patch profile, list already-shown, `record_feed_items`).
+- `mcp.py` — builds MCP toolsets (HuggingFace remote HTTP + the three gateway containers); each source is opt-in by config.
+- `agents.py` — per-run agent factories (`make_profile_agent`, `make_chat_agent`). One `make_chat_agent` serves **both** Telegram chat and the scheduled feed. A fresh `Agent` per run; MCP connections open inside `async with agent`.
+- `runtime.py` — `build_profile` (explore sub-agent), `chat`, and `curate_feed` (a synthetic "assemble the feed" turn). Chat and feed run through the same agent and share one persisted message history. The feed is **free-form text** (no structured schema); the agent records what it surfaces via `record_feed_items`. `build_profile_safe` runs in the background on first connect / `/init`.
+- Memory: the **profile** is a sectioned markdown doc the agent self-edits via `update_profile_section`; `agent_messages` stores the structured pydantic-ai message history (tool calls/results included), replayed via `message_history=` and bounded by a **token budget** (`AGENT_HISTORY_TOKEN_BUDGET`, counted with tiktoken; `/compact` summarizes, `/reset` clears); `feed_items` is the dedup ledger of what's been shown.
+
+### Services (`server/src/services/`)
+
+- `feed.py` — one per-user pass: `curate_feed` → deliver to Telegram → mark fed (error-contained).
+- `scheduler.py` — APScheduler hourly job over all feedable connections, fresh session per user, never raises.
+- `telegram_bot.py` (aiogram) — `/start <code>` links a chat, `/init` rebuilds the profile, `/compact` summarizes history into one note, `/reset` clears history (profile kept), free text → `runtime.chat`. `notifier.py` sends the free-form digest as plain, chunked text. Both opt-in via `TELEGRAM_BOT_TOKEN`.
 
 ### Frontend (`client/`)
 
@@ -97,10 +108,11 @@ Dev uses `docker-compose.yaml` + `docker-compose.dev.yaml`. Prod uses `docker-co
 - Path alias: `@` → `./src`
 - Pinia stores use **setup store** style (not options API)
 - API client: `src/api/client.ts` — axios instance with JWT injection and 401 handling
-- Auth: `src/stores/auth.ts` — login/register/logout with localStorage token persistence
+- Auth: `src/stores/auth.ts` — `setToken` (adopts the OAuth JWT from the callback) + `fetchUser`/`logout`; email/password `login`/`register` kept as a fallback
 - Router guards: `src/router/index.ts` — `meta.requiresAuth` checked in `beforeEach`
-- Views: `src/views/` — LoginView, RegisterView, DashboardView
-- Layout: `src/layouts/DefaultLayout.vue` — navbar with auth-aware navigation
+- Views (minimal): `LandingView` (Connect with GitHub), `AuthCallbackView` (`/auth/callback`), `ConnectedView` (status + Go-to-Telegram). All real interaction happens in Telegram. Login/Register/Dashboard views are kept but unlinked from nav.
+- API: `src/api/agent.ts` — `getStatus`, `getTelegramLink`
+- Layout: `src/layouts/DefaultLayout.vue` — minimal navbar (brand + Logout)
 - Unit tests: Vitest + jsdom (excludes `e2e/` directory)
 - E2E tests: Playwright (Chromium, Firefox, WebKit)
 
@@ -111,13 +123,18 @@ Dev uses `docker-compose.yaml` + `docker-compose.dev.yaml`. Prod uses `docker-co
 
 ## Environment Setup
 
-1. Run `make setup` (creates `.env.dev` and `.env.prod` from examples)
-2. Start dev: `make dev-up`
-3. App at `http://localhost:5746`, API docs at `http://localhost:5746/api/docs`
+1. Run `make setup` (creates `.env` from `.env.example`)
+2. Fill `.env`: `GITHUB_OAUTH_CLIENT_ID/_SECRET` (callback `${APP_BASE_URL}/api/auth/github/callback`), `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN/_USERNAME`, optionally `HF_TOKEN`
+3. `make build && make up`
+4. App at `http://localhost:5746`, API docs at `http://localhost:5746/api/docs`
+
+The agent (OpenRouter), Telegram delivery, and each MCP source are all **opt-in** — absent keys/URLs disable that piece cleanly.
 
 ## Key Patterns
 
-- **Adding a new model**: Create in `src/models/postgres/`, import in `src/models/postgres/__init__.py`, then `make dev-make-migrations "description"`
+- **Adding a new model**: Create in `src/models/postgres/`, import in `src/models/postgres/__init__.py` (also makes it visible to the SQLite test schema), then `make make-migrations "description"`
+- **Adding an agent tool**: write an async `fn(ctx: RunContext[AgentDeps], ...) -> str` in `src/agent/tools/`, add it to the relevant list (`GITHUB_TOOLS`/`FEED_TOOLS`/`MEMORY_TOOLS`); tool deps (DB session, GitHub token) come from `ctx.deps`
+- **Adding an MCP feed source**: add a config URL + a clause in `src/agent/mcp.py`; add the gateway service in `docker-compose.yaml` if it's a stdio server
 - **Adding an API route**: Create router in `src/api/endpoints/`, include it in `src/api/router.py`
 - **Database sessions**: Use `get_postgres_session` as a FastAPI dependency (`Depends(get_postgres_session)`)
 - **Auth-protected endpoints**: Use `Depends(get_current_user)` or `Depends(get_current_superuser)`

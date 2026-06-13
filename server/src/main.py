@@ -32,7 +32,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_logging()
     logger = structlog.get_logger()
     logger.info("startup", app_name=settings.app_name)
+
+    from src.services import scheduler, telegram_bot
+
+    if settings.discovery_enabled and settings.agent_enabled:
+        scheduler.start_scheduler()
+    else:
+        logger.info("discovery_disabled", agent_enabled=settings.agent_enabled)
+
+    if settings.telegram_enabled:
+        telegram_bot.start_bot()
+    else:
+        logger.info("telegram_disabled")
+
     yield
+
+    await telegram_bot.stop_bot()
+    scheduler.stop_scheduler()
     logger.info("shutdown", app_name=settings.app_name)
 
 

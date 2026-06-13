@@ -39,6 +39,13 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // Used by the GitHub OAuth callback: adopt the JWT minted server-side, then load the user.
+  async function setToken(newToken: string) {
+    token.value = newToken
+    localStorage.setItem('token', newToken)
+    await fetchUser()
+  }
+
   async function fetchUser() {
     try {
       user.value = await getCurrentUser()
@@ -53,5 +60,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('token')
   }
 
-  return { user, token, isAuthenticated, login, register, fetchUser, logout }
+  return { user, token, isAuthenticated, login, register, setToken, fetchUser, logout }
 })

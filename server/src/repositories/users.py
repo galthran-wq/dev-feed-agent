@@ -36,6 +36,16 @@ class UserRepositoryInterface(ABC):
     async def delete_user(self, user_identifier: UUID | str, deleting_user_id: UUID) -> UserModel:
         pass
 
+    @abstractmethod
+    async def get_by_github_id(self, github_id: str) -> UserModel | None:
+        pass
+
+    @abstractmethod
+    async def upsert_github_user(
+        self, github_id: str, username: str, access_token: str, avatar_url: str | None
+    ) -> tuple[UserModel, bool]:
+        pass
+
 
 class UserRepository(UserRepositoryInterface):
     def __init__(self, session: AsyncSession):
@@ -113,3 +123,26 @@ class UserRepository(UserRepositoryInterface):
         await self.session.commit()
 
         return user
+
+    async def get_by_github_id(self, github_id: str) -> UserModel | None:
+        result = await self.session.execute(select(UserModel).where(UserModel.github_id == github_id))
+        return result.scalar_one_or_none()
+
+    async def upsert_github_user(
+        self, github_id: str, username: str, access_token: str, avatar_url: str | None
+    ) -> tuple[UserModel, bool]:
+        """Find-or-create a user by GitHub identity, refreshing the stored token.
+
+        Returns ``(user, created)`` so callers can trigger first-connect side effects.
+        """
+        user = await self.get_by_github_id(github_id)
+        created = user is None
+        if user is None:
+            user = UserModel(github_id=github_id, is_verified=True)
+            self.session.add(user)
+        user.github_username = username
+        user.github_access_token = access_token
+        user.avatar_url = avatar_url
+        await self.session.commit()
+        await self.session.refresh(user)
+        return user, created

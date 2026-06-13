@@ -6,8 +6,21 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/dashboard',
+      name: 'home',
+      component: () => import('@/views/LandingView.vue'),
     },
+    {
+      path: '/auth/callback',
+      name: 'auth-callback',
+      component: () => import('@/views/AuthCallbackView.vue'),
+    },
+    {
+      path: '/connected',
+      name: 'connected',
+      component: () => import('@/views/ConnectedView.vue'),
+      meta: { requiresAuth: true },
+    },
+    // Email/password views are kept as a fallback but are not part of the primary flow.
     {
       path: '/login',
       name: 'login',
@@ -45,11 +58,11 @@ router.beforeEach(async (to) => {
   }
 
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
-    return { name: 'login' }
+    return { name: 'home' }
   }
 
   if ((to.name === 'login' || to.name === 'register') && auth.isAuthenticated) {
-    return { name: 'dashboard' }
+    return { name: 'connected' }
   }
 })
 
