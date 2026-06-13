@@ -38,15 +38,14 @@ def build_mcp_servers() -> list[MCPServerStreamableHTTP]:
         )
     # Gateway-container sources (supergateway re-exposes a stdio server as HTTP). Each
     # carries its own auth inside the container, so the agent connects with no header.
-    # Perplexity is API-key-gated and opt-in: its gateway URL is unset unless configured.
-    for url in (
-        settings.mcp_hn_url,
-        settings.mcp_arxiv_url,
-        settings.mcp_reddit_url,
-        settings.mcp_perplexity_url,
-    ):
+    for url in (settings.mcp_hn_url, settings.mcp_arxiv_url, settings.mcp_reddit_url):
         if url:
             servers.append(MCPServerStreamableHTTP(url=url, timeout=settings.mcp_probe_timeout))
+
+    # Perplexity is API-key-gated and opt-in (started via the `perplexity` compose
+    # profile); `perplexity_enabled` is the single source of truth for the gate.
+    if settings.perplexity_enabled:
+        servers.append(MCPServerStreamableHTTP(url=settings.mcp_perplexity_url, timeout=settings.mcp_probe_timeout))
 
     logger.info("mcp_servers_configured", count=len(servers))
     return servers

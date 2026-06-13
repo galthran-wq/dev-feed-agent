@@ -126,13 +126,16 @@ services:
     restart: unless-stopped
 
   # Optional, API-key-gated web-grounded source (the official @perplexity-ai/mcp-server).
-  # Opt-in & cost-aware: the agent only wires it when MCP_PERPLEXITY_URL is set (skipped
-  # otherwise), so if you don't want Perplexity, leave PERPLEXITY_API_KEY / MCP_PERPLEXITY_URL
-  # empty — this container will still start but is simply never reached by the agent (you may
-  # also remove this service entirely). PERPLEXITY_API_KEY is read from .env and handed to the
-  # stdio child; nothing else passes a Perplexity credential.
+  # Behind the `perplexity` compose profile, so a default `make up` does NOT start it.
+  # The upstream server calls process.exit(1) when PERPLEXITY_API_KEY is empty, so running
+  # it without a key would crash-loop — the profile keeps it off until you opt in with:
+  #   docker compose --profile perplexity up -d   (and set PERPLEXITY_API_KEY + MCP_PERPLEXITY_URL)
+  # The agent only wires the source when MCP_PERPLEXITY_URL is set, so it stays skipped
+  # otherwise. PERPLEXITY_API_KEY is read from .env and handed to the stdio child; nothing
+  # else passes a Perplexity credential.
   mcp-perplexity:
     image: dev-feed-mcp-gateway:latest
+    profiles: ["perplexity"]
     build:
       context: ./deploy/mcp
     environment:

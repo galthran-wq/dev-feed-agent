@@ -99,8 +99,15 @@ nginx (reverse proxy, :5746)
 Perplexity adds web-grounded search/news to complement the developer-centric sources —
 mainly for explicit "go deeper" chat queries rather than every cron poll. It's **opt-in**
 and API-key-gated: leave `PERPLEXITY_API_KEY` / `MCP_PERPLEXITY_URL` unset and the agent
-simply skips it (no container required to run the app). To enable, set `PERPLEXITY_API_KEY`
-(handed to the `mcp-perplexity` gateway, which wraps the official `@perplexity-ai/mcp-server`
-stdio server via `supergateway`) and `MCP_PERPLEXITY_URL=http://mcp-perplexity:8000/mcp`.
+simply skips it. The `mcp-perplexity` gateway sits behind the `perplexity` compose profile,
+so a default `make up` never starts it (the upstream server exits when no key is set, which
+would otherwise crash-loop). To enable, set `PERPLEXITY_API_KEY`, set
+`MCP_PERPLEXITY_URL=http://mcp-perplexity:8000/mcp`, and start the gateway explicitly:
+
+```bash
+docker compose --profile perplexity up -d
+```
+
+The gateway wraps the official `@perplexity-ai/mcp-server` stdio server via `supergateway`.
 Like every feed source, Perplexity returns external/untrusted content — the same
 prompt-injection caveat applies (returned text is data, never instructions).
