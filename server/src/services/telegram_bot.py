@@ -50,7 +50,8 @@ def _build_dispatcher() -> Any:
         else:
             await message.answer(
                 "✅ Linked! I'll send your feed here.\n"
-                "Chat with me anytime to steer it, or send /init to (re)build your profile."
+                "Chat with me anytime to steer it.\n"
+                "Commands: /init rebuild profile · /compact summarize our chat · /reset clear it"
             )
 
     @dp.message(Command("init"))
@@ -66,6 +67,34 @@ def _build_dispatcher() -> Any:
             user_id = user.id
         await message.answer("🔧 Rebuilding your interest profile from your GitHub activity…")
         asyncio.create_task(runtime.build_profile_safe(user_id))  # noqa: RUF006
+
+    @dp.message(Command("reset"))
+    async def on_reset(message: Message) -> None:
+        async with AsyncSessionLocal() as session:
+            user = await _user_for_chat(session, str(message.chat.id))
+            if user is None:
+                await message.answer("This chat isn't linked yet. Link it from the web app first.")
+                return
+            await runtime.reset(session, user)
+        await message.answer("🧹 Cleared our conversation history. Your interest profile is kept.")
+
+    @dp.message(Command("compact"))
+    async def on_compact(message: Message) -> None:
+        if not settings.agent_enabled:
+            await message.answer("The agent isn't configured yet.")
+            return
+        try:
+            async with AsyncSessionLocal() as session:
+                user = await _user_for_chat(session, str(message.chat.id))
+                if user is None:
+                    await message.answer("This chat isn't linked yet. Link it from the web app first.")
+                    return
+                summary = await runtime.compact(session, user)
+        except Exception as exc:
+            logger.error("telegram_compact_failed", error=str(exc))
+            await message.answer("Sorry, couldn't compact just now. Try again in a moment.")
+            return
+        await notifier.send_text(str(message.chat.id), f"🗜 Compacted. Carrying forward:\n\n{summary}")
 
     @dp.message(F.text)
     async def on_text(message: Message) -> None:

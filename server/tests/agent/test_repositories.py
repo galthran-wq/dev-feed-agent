@@ -89,6 +89,29 @@ async def test_agent_message_history_roundtrip(db_session: AsyncSession) -> None
     assert len(recent) == 2
     assert recent[0].parts[0].content == "any rust news?"
 
+    # A tiny token budget still keeps at least the newest run.
+    budgeted = await repo.load(user_id, max_tokens=1)
+    assert len(budgeted) == 2
+    assert budgeted[0].parts[0].content == "any rust news?"
+
+
+async def test_agent_message_reset_and_compact(db_session: AsyncSession) -> None:
+    repo = AgentMessageRepository(db_session)
+    user_id = uuid4()
+    run = [ModelRequest(parts=[UserPromptPart(content="hi")]), ModelResponse(parts=[TextPart(content="yo")])]
+    await repo.append(user_id, ModelMessagesTypeAdapter.dump_json(run))
+
+    # /reset clears everything.
+    await repo.clear(user_id)
+    assert await repo.load(user_id) == []
+
+    # /compact collapses history to a single system note carrying the summary.
+    await repo.append(user_id, ModelMessagesTypeAdapter.dump_json(run))
+    await repo.replace_with_summary(user_id, "User likes Rust; shown 3 repos.")
+    collapsed = await repo.load(user_id)
+    assert len(collapsed) == 1
+    assert "User likes Rust" in collapsed[0].parts[0].content
+
 
 async def test_telegram_link_is_single_use_and_no_hijack(db_session: AsyncSession) -> None:
     repo = ConnectionRepository(db_session)

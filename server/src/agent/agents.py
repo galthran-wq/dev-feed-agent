@@ -39,6 +39,18 @@ def make_profile_agent() -> Agent[AgentDeps, str]:
     )
 
 
+def make_summarizer_agent() -> Agent[None, str]:
+    """No-tools agent used by /compact to summarize prior history into a short note."""
+    return Agent(
+        _model(settings.agent_model),
+        system_prompt=(
+            "You compact a conversation for your future self. Given the prior messages, write a "
+            "tight note capturing durable facts about the user, their stated preferences, current "
+            "focus, and what's already been shown. Be concise; omit small talk. Do not call tools."
+        ),
+    )
+
+
 def make_chat_agent() -> Agent[AgentDeps, str]:
     """The one memory-aware agent: handles Telegram chat AND assembles the scheduled
     feed (driven by a synthetic turn). Free-form text out; it records what it surfaces

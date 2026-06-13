@@ -66,7 +66,7 @@ async def chat(session: AsyncSession, user: UserModel, message: str) -> str:
     """Handle one chat turn against the shared, persisted message history."""
     _require_agent()
     msg_repo = AgentMessageRepository(session)
-    history = await msg_repo.load(user.id)
+    history = await msg_repo.load(user.id, max_tokens=settings.agent_history_token_budget)
 
     agent = agents.make_chat_agent()
     async with agent:
@@ -74,6 +74,28 @@ async def chat(session: AsyncSession, user: UserModel, message: str) -> str:
 
     await msg_repo.append(user.id, result.new_messages_json())
     return result.output
+
+
+async def compact(session: AsyncSession, user: UserModel) -> str:
+    """/compact — summarize stored history into a single note, freeing context."""
+    _require_agent()
+    msg_repo = AgentMessageRepository(session)
+    # Pull as much history as we can to summarize it (bounded so compaction itself stays sane).
+    history = await msg_repo.load(user.id, max_tokens=100_000, max_runs=1000)
+    if not history:
+        return "Nothing to compact yet."
+    agent = agents.make_summarizer_agent()
+    async with agent:
+        result = await agent.run("Summarize the conversation so far.", message_history=history)
+    await msg_repo.replace_with_summary(user.id, result.output)
+    logger.info("history_compacted", user_id=str(user.id))
+    return result.output
+
+
+async def reset(session: AsyncSession, user: UserModel) -> None:
+    """/reset — clear conversation history (the interest profile is kept)."""
+    await AgentMessageRepository(session).clear(user.id)
+    logger.info("history_reset", user_id=str(user.id))
 
 
 async def curate_feed(session: AsyncSession, user: UserModel) -> tuple[str, int]:
@@ -101,7 +123,7 @@ async def curate_feed(session: AsyncSession, user: UserModel) -> tuple[str, int]
     )
 
     msg_repo = AgentMessageRepository(session)
-    history = await msg_repo.load(user.id)
+    history = await msg_repo.load(user.id, max_tokens=settings.agent_history_token_budget)
 
     agent = agents.make_chat_agent()
     deps = _deps(session, user)

@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     feed_size: int = 8
     # Share of each feed reserved for exploration (new horizons) vs exploitation (known interests).
     explore_ratio: float = 0.3
+    # Token budget for replayed agent conversation history (the rest is trimmed oldest-first).
+    agent_history_token_budget: int = 12000
 
     @property
     def agent_enabled(self) -> bool:

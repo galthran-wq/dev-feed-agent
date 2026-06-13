@@ -21,6 +21,7 @@ dependencies = [
     "pydantic-ai-slim[openai,mcp]>=0.4.0",
     "aiogram>=3.15.0",
     "apscheduler>=3.11.0",
+    "tiktoken>=0.8.0",
 ]
 
 [dependency-groups]
@@ -55,7 +56,7 @@ explicit_package_bases = true
 mypy_path = "."
 
 [[tool.mypy.overrides]]
-module = ["jose.*", "passlib.*", "apscheduler.*"]
+module = ["jose.*", "passlib.*", "apscheduler.*", "tiktoken.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
