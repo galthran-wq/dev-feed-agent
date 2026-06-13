@@ -53,8 +53,6 @@ class Settings(BaseSettings):
     feed_size: int = 8
     # Share of each feed reserved for exploration (new horizons) vs exploitation (known interests).
     explore_ratio: float = 0.3
-    # Agent-assigned relevance (0..1) an item must reach to be delivered.
-    relevance_threshold: float = 0.5
 
     @property
     def agent_enabled(self) -> bool:

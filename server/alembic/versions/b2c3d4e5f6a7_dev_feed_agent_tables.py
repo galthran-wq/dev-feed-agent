@@ -77,7 +77,6 @@ def upgrade() -> None:
         sa.Column('url', sa.String(), nullable=False),
         sa.Column('title', sa.Text(), nullable=False),
         sa.Column('summary', sa.Text(), nullable=True),
-        sa.Column('score', sa.Float(), nullable=False, server_default=sa.text('0')),
         sa.Column('reason', sa.Text(), nullable=True),
         sa.Column('bucket', sa.String(length=16), nullable=False, server_default=sa.text("'exploit'")),
         sa.Column('status', sa.String(length=16), nullable=False, server_default=sa.text("'delivered'")),

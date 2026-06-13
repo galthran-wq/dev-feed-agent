@@ -90,4 +90,4 @@ nginx (reverse proxy, :5746)
 | `AGENT_MODEL` / `PROFILE_BUILDER_MODEL` | OpenRouter model slugs |
 | `TELEGRAM_BOT_TOKEN` / `_USERNAME` | Telegram delivery + deep link |
 | `HF_TOKEN`, `MCP_*_URL` | MCP feed sources (per-source opt-in) |
-| `FEED_SIZE`, `EXPLORE_RATIO`, `RELEVANCE_THRESHOLD`, `POLL_INTERVAL_MINUTES` | Feed tuning |
+| `FEED_SIZE`, `EXPLORE_RATIO`, `POLL_INTERVAL_MINUTES` | Feed tuning |

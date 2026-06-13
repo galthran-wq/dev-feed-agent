@@ -43,7 +43,7 @@ def format_feed_item(item: FeedItemModel) -> str:
         lines.append(f"_{_escape(item.summary[:200])}_")
     if item.reason:
         lines.append(f"💡 {_escape(item.reason)}")
-    lines.append(f"{bucket} · match {item.score:.2f}")
+    lines.append(bucket)
     return "\n".join(lines)
 
 

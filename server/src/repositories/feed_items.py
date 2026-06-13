@@ -33,7 +33,6 @@ class FeedItemRepository:
         url: str,
         title: str,
         summary: str | None = None,
-        score: float = 0.0,
         reason: str | None = None,
         bucket: str = "exploit",
     ) -> FeedItemModel:
@@ -45,7 +44,6 @@ class FeedItemRepository:
             url=url,
             title=title,
             summary=summary,
-            score=score,
             reason=reason,
             bucket=bucket,
         )

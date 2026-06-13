@@ -103,14 +103,15 @@ async def curate_feed(session: AsyncSession, user: UserModel) -> list[FeedItemMo
 
 
 async def _record_feed(session: AsyncSession, user_id: UUID, items: list[CuratedItem]) -> list[FeedItemModel]:
-    """Filter by relevance, drop already-seen items, persist the rest as delivered."""
+    """Drop invalid + already-seen items, persist the rest as delivered (in the agent's order)."""
     feed_repo = FeedItemRepository(session)
-    relevant = [i for i in items if i.score >= settings.relevance_threshold and i.url and i.external_id]
-    keys = [(i.source, i.external_id) for i in relevant]
-    unseen = await feed_repo.filter_unseen(user_id, keys)
+    # The curator already decided what's worth showing — inclusion is the signal, so we
+    # only drop items missing the identifiers we need and ones we've shown before.
+    candidates = [i for i in items if i.url and i.external_id]
+    unseen = await feed_repo.filter_unseen(user_id, [(i.source, i.external_id) for i in candidates])
 
     recorded: list[FeedItemModel] = []
-    for item in sorted(relevant, key=lambda i: i.score, reverse=True):
+    for item in candidates:
         if (item.source, item.external_id) not in unseen:
             continue
         try:
@@ -122,7 +123,6 @@ async def _record_feed(session: AsyncSession, user_id: UUID, items: list[Curated
                 url=item.url,
                 title=item.title,
                 summary=item.summary or None,
-                score=item.score,
                 reason=item.reason,
                 bucket=item.bucket if item.bucket in ("exploit", "explore") else "exploit",
             )

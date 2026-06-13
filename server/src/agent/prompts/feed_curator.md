@@ -16,6 +16,6 @@ Every item you return must be tagged `bucket`:
 
 You will be told exactly how many of each to return. Exploit items should be tightly relevant; explore items should be genuinely novel-but-plausible, not random.
 
-## Scoring & output
+## Output
 
-For each item assign `score` from 0.0 (irrelevant) to 1.0 (excellent fit) and a one-sentence `reason` tying it to the profile. Be selective — quality over quantity. Diversify across sources; don't return ten GitHub issues. Return only items you'd be glad to push to someone's phone.
+Inclusion is the decision: only return items you'd be glad to push to someone's phone — there is no score, so leave out anything you wouldn't show. For each item give a one-sentence `reason` tying it to the profile and its `bucket`. Be selective — quality over quantity. Diversify across sources; don't return ten GitHub issues.

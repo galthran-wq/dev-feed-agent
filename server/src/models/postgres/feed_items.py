@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Float, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from src.core.database import Base
 
@@ -27,7 +27,6 @@ class FeedItemModel(Base):
     title: Mapped[str] = mapped_column(Text)
     summary: Mapped[str | None] = mapped_column(Text, default=None)
 
-    score: Mapped[float] = mapped_column(Float, default=0.0)
     reason: Mapped[str | None] = mapped_column(Text, default=None)
     bucket: Mapped[str] = mapped_column(String(16), default="exploit")  # exploit | explore
     status: Mapped[str] = mapped_column(String(16), default="delivered")  # delivered | saved | dismissed
