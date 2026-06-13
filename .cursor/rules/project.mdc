@@ -1,0 +1,26 @@
+---
+description: "Project-wide conventions and architecture"
+alwaysApply: true
+---
+
+# Project Overview
+
+Full-stack web application: FastAPI backend + Vue 3 frontend, Docker Compose orchestration, Nginx reverse proxy, PostgreSQL, Prometheus/Grafana monitoring.
+
+## Commands
+
+- `make setup` — create .env files from examples
+- `make dev-up` / `make dev-down` — start/stop dev services
+- `make dev-test` — run pytest in Docker
+- `make dev-lint` — ruff check + format --check + mypy
+- `make dev-format` — auto-fix with ruff
+- `make dev-shell` — bash into server container
+- `cd client && npm run test:unit` — Vitest unit tests
+- `cd client && npm run lint` — ESLint
+
+## Architecture
+
+- Backend at `server/`, frontend at `client/`, nginx configs at `nginx/`
+- Dev: `docker-compose.yaml` + `docker-compose.dev.yaml` (port 5746)
+- Prod: `docker-compose.yaml` + `docker-compose.prod.yaml`
+- Nginx routes: `/` → frontend, `/api/*` → backend, `/health`, `/ready`, `/metrics`

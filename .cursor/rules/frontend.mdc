@@ -1,0 +1,35 @@
+---
+description: "Vue.js frontend conventions"
+globs: client/src/**/*.ts, client/src/**/*.vue
+alwaysApply: false
+---
+
+# Frontend Conventions
+
+## Stack
+Vue 3.5 (Composition API, `<script setup>`), TypeScript, Vite 7, Pinia 3, Vue Router 4, Axios
+
+## Structure
+- `src/api/client.ts` — axios instance with JWT injection and 401 redirect
+- `src/api/` — typed API functions (one file per domain)
+- `src/stores/` — Pinia setup stores (use `ref()`, `computed()`, plain functions)
+- `src/router/index.ts` — routes with `meta.requiresAuth`, `beforeEach` guard
+- `src/views/` — page components (LoginView, RegisterView, DashboardView)
+- `src/layouts/` — layout components (DefaultLayout)
+
+## Key Patterns
+- Pinia stores must use **setup store** style (not options API)
+- Path alias: `@` → `./src`
+- API calls go through `src/api/client.ts` (shared axios instance)
+- Auth tokens stored in `localStorage`, injected via axios interceptor
+- Route guards check `useAuthStore().isAuthenticated`
+
+## Code Style
+- ESLint + Prettier: `semi: false`, `singleQuote: true`, `printWidth: 100`
+- 2-space indent, LF line endings
+- `<script setup lang="ts">` for all components
+
+## Testing
+- Unit tests: Vitest + jsdom (`npm run test:unit`)
+- E2E tests: Playwright (`npm run test:e2e`)
+- Test files in `src/**/__tests__/` or co-located
