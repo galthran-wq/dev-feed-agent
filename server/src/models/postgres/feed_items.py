@@ -29,6 +29,9 @@ class FeedItemModel(Base):
 
     reason: Mapped[str | None] = mapped_column(Text, default=None)
     bucket: Mapped[str] = mapped_column(String(16), default="exploit")  # exploit | explore
-    status: Mapped[str] = mapped_column(String(16), default="delivered")  # delivered | saved | dismissed
+    # Recorded as "pending" at curation time; flipped to "delivered" only after a successful
+    # Telegram send (see services/feed.py). A failed delivery leaves the row "pending" so the
+    # next pass retries it — the shown-ledger and delivery stay reconciled.
+    status: Mapped[str] = mapped_column(String(16), default="pending")  # pending | delivered | saved | dismissed
 
     delivered_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))

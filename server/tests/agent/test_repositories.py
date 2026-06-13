@@ -63,6 +63,53 @@ async def test_feed_item_dedup(db_session: AsyncSession) -> None:
     assert await repo.count(user_id) == 1
 
 
+async def test_feed_item_pending_to_delivered(db_session: AsyncSession) -> None:
+    repo = FeedItemRepository(db_session)
+    user_id = uuid4()
+
+    # Newly recorded items default to "pending" — not yet confirmed delivered.
+    item = await repo.add(
+        user_id,
+        source="github",
+        item_type="repo",
+        external_id="owner/name",
+        url="https://github.com/owner/name",
+        title="A repo",
+    )
+    assert item.status == "pending"
+
+    await repo.add(
+        user_id,
+        source="arxiv",
+        item_type="paper",
+        external_id="2401.00001",
+        url="https://arxiv.org/abs/2401.00001",
+        title="A paper",
+    )
+
+    # list_pending returns only pending items.
+    pending = await repo.list_pending(user_id)
+    assert {(p.source, p.external_id) for p in pending} == {("github", "owner/name"), ("arxiv", "2401.00001")}
+
+    # Pending items still dedup via filter_unseen (so they aren't re-curated as new).
+    unseen = await repo.filter_unseen(user_id, [("github", "owner/name"), ("github", "new/one")])
+    assert unseen == {("github", "new/one")}
+
+    # mark_delivered flips only the named pending rows to "delivered".
+    changed = await repo.mark_delivered(user_id, [("github", "owner/name")])
+    assert changed == 1
+
+    pending_after = await repo.list_pending(user_id)
+    assert {(p.source, p.external_id) for p in pending_after} == {("arxiv", "2401.00001")}
+
+    # Re-marking is idempotent: an already-delivered row (and an empty list) change nothing.
+    assert await repo.mark_delivered(user_id, [("github", "owner/name")]) == 0
+    assert await repo.mark_delivered(user_id, []) == 0
+
+    # Delivered items remain in the dedup ledger.
+    assert await repo.filter_unseen(user_id, [("github", "owner/name")]) == set()
+
+
 async def test_agent_message_history_roundtrip(db_session: AsyncSession) -> None:
     repo = AgentMessageRepository(db_session)
     user_id = uuid4()

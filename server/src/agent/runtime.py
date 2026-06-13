@@ -98,12 +98,14 @@ async def reset(session: AsyncSession, user: UserModel) -> None:
     logger.info("history_reset", user_id=str(user.id))
 
 
-async def curate_feed(session: AsyncSession, user: UserModel) -> tuple[str, int]:
+async def curate_feed(session: AsyncSession, user: UserModel) -> tuple[str, list[tuple[str, str]]]:
     """Assemble the feed as a synthetic turn through the shared agent.
 
-    Returns ``(digest_text, new_items)`` — the free-form digest to deliver and how many
-    items the agent newly recorded (0 means nothing fresh, skip delivery). The agent
-    records what it surfaces via the record_feed_items tool, which is the dedup ledger.
+    Returns ``(digest_text, recorded_keys)`` — the free-form digest to deliver and the
+    ``(source, external_id)`` keys the agent newly recorded this run (empty means nothing
+    fresh, skip delivery). The agent records what it surfaces via the record_feed_items
+    tool as "pending"; the feed pass flips those keys to "delivered" only after a
+    successful send, keeping the dedup ledger and delivery reconciled.
     """
     _require_agent()
     profile_md = await ProfileRepository(session).get_markdown(user.id)
@@ -131,11 +133,12 @@ async def curate_feed(session: AsyncSession, user: UserModel) -> tuple[str, int]
         result = await agent.run(prompt, message_history=history, deps=deps)
 
     await msg_repo.append(user.id, result.new_messages_json())
-    # `recorded` is the authoritative tally of what the agent surfaced this run.
-    new_items = len(deps.recorded)
-    if new_items == 0 and len(result.output.strip()) > 80:
+    # `recorded` is the authoritative record of what the agent surfaced this run; the keys
+    # let the feed pass mark exactly these items delivered once they actually reach the user.
+    recorded_keys = [(r["source"], r["external_id"]) for r in deps.recorded if r.get("source") and r.get("external_id")]
+    if not recorded_keys and len(result.output.strip()) > 80:
         # A substantive digest but nothing recorded usually means a skipped record_feed_items
         # call — surface it rather than silently dropping the feed.
         logger.warning("feed_digest_without_record", user_id=str(user.id))
-    logger.info("feed_curated", user_id=str(user.id), new_items=new_items)
-    return result.output, new_items
+    logger.info("feed_curated", user_id=str(user.id), new_items=len(recorded_keys))
+    return result.output, recorded_keys

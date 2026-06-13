@@ -84,8 +84,10 @@ async def record_feed_items(ctx: RunContext[AgentDeps], items: list[ShownItem]) 
                 summary=it.summary,
                 reason=it.reason,
                 bucket=it.bucket if it.bucket in ("exploit", "explore") else "exploit",
+                status="pending",  # delivery hasn't happened yet; flipped after a successful send
             )
-            recorded.append({"title": it.title, "url": it.url, "bucket": it.bucket})
+            # Keep source + external_id so the feed pass can mark exactly these delivered.
+            recorded.append({"source": it.source, "external_id": it.external_id, "title": it.title, "url": it.url})
         except Exception as exc:  # unique race / bad data — skip, keep going
             await ctx.deps.session.rollback()
             logger.warning("record_feed_item_failed", error=str(exc))

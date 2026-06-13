@@ -1,6 +1,7 @@
+from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import CursorResult, func, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.postgres.feed_items import FeedItemModel
 
@@ -35,6 +36,7 @@ class FeedItemRepository:
         summary: str | None = None,
         reason: str | None = None,
         bucket: str = "exploit",
+        status: str = "pending",
     ) -> FeedItemModel:
         item = FeedItemModel(
             user_id=user_id,
@@ -46,11 +48,48 @@ class FeedItemRepository:
             summary=summary,
             reason=reason,
             bucket=bucket,
+            status=status,
         )
         self.session.add(item)
         await self.session.commit()
         await self.session.refresh(item)
         return item
+
+    async def mark_delivered(self, user_id: UUID, keys: list[tuple[str, str]]) -> int:
+        """Flip the given ``(source, external_id)`` rows from pending → delivered.
+
+        Called only after a successful Telegram send, so the shown-ledger reflects what
+        actually reached the user. Returns how many rows changed. Idempotent: rows already
+        delivered (or in another terminal status) are left untouched.
+        """
+        if not keys:
+            return 0
+        result = await self.session.execute(
+            update(FeedItemModel)
+            .where(
+                FeedItemModel.user_id == user_id,
+                FeedItemModel.status == "pending",
+                tuple_(FeedItemModel.source, FeedItemModel.external_id).in_(keys),
+            )
+            .values(status="delivered")
+        )
+        await self.session.commit()
+        # ``execute`` of a bulk UPDATE returns a CursorResult, which exposes rowcount.
+        return int(cast("CursorResult[Any]", result).rowcount or 0)
+
+    async def list_pending(self, user_id: UUID, limit: int = 200) -> list[FeedItemModel]:
+        """Items recorded but not yet confirmed delivered — leftovers from a failed send.
+
+        ``filter_unseen`` still excludes these (so the agent won't re-curate them as new),
+        but the feed pass re-attempts delivery for them before curating.
+        """
+        result = await self.session.execute(
+            select(FeedItemModel)
+            .where(FeedItemModel.user_id == user_id, FeedItemModel.status == "pending")
+            .order_by(FeedItemModel.delivered_at.asc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
 
     async def count(self, user_id: UUID) -> int:
         result = await self.session.execute(
