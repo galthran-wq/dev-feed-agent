@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -71,7 +72,7 @@ class FeedItemRepository:
                 FeedItemModel.status == "pending",
                 tuple_(FeedItemModel.source, FeedItemModel.external_id).in_(keys),
             )
-            .values(status="delivered")
+            .values(status="delivered", delivered_at=datetime.now(UTC))
         )
         await self.session.commit()
         # ``execute`` of a bulk UPDATE returns a CursorResult, which exposes rowcount.
