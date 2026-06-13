@@ -1,6 +1,6 @@
 """memories: a specific/local memory lane distinct from the profile
 
-Revision ID: c3d4e5f6a7b8
+Revision ID: e5b2c3d4f6a7
 Revises: b2c3d4e5f6a7
 
 """
@@ -10,7 +10,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = 'c3d4e5f6a7b8'
+revision: str = 'e5b2c3d4f6a7'
 down_revision: Union[str, None] = 'b2c3d4e5f6a7'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

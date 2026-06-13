@@ -23,13 +23,19 @@ class MemoryRepository:
         return builtins.list(result.scalars().all())
 
     async def search(self, user_id: UUID, query: str) -> builtins.list[MemoryModel]:
-        """Naive case-insensitive substring match over title + body."""
-        pattern = f"%{query}%"
+        """Naive case-insensitive substring match over title + body. LIKE metacharacters
+        in ``query`` (``%`` ``_`` ``\\``) are escaped so a query like ``100%`` matches the
+        literal text rather than acting as a wildcard."""
+        escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
         result = await self.session.execute(
             select(MemoryModel)
             .where(
                 MemoryModel.user_id == user_id,
-                or_(MemoryModel.title.ilike(pattern), MemoryModel.body.ilike(pattern)),
+                or_(
+                    MemoryModel.title.ilike(pattern, escape="\\"),
+                    MemoryModel.body.ilike(pattern, escape="\\"),
+                ),
             )
             .order_by(MemoryModel.created_at.desc())
         )
