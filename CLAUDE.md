@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**dev-feed-agent** — a personalized, agentic news feed for developers / ML engineers. Users sign in with GitHub (OAuth); an agent (pydantic-ai over OpenRouter) profiles their interests from their GitHub activity, then curates a feed across GitHub, HuggingFace, Hacker News, arXiv and Reddit (the latter four via MCP) and delivers it to Telegram. Built on a FastAPI + Vue 3 + PostgreSQL template with Nginx, Prometheus and Grafana.
+**dev-feed-agent** — a personalized, agentic news feed for developers / ML engineers. Users sign in with GitHub (OAuth); an agent (pydantic-ai over OpenRouter) profiles their interests from their GitHub activity, then curates a feed across GitHub, HuggingFace, Hacker News, arXiv and Reddit (the latter four via MCP) and delivers it to Telegram. Built on a FastAPI + Vue 3 + PostgreSQL template with Nginx.
 
 ## Common Commands
 
@@ -51,7 +51,6 @@ cd client && npm run format       # Prettier
 - **client** — Vue 3; built to static and served by nginx (build-based, no dev server)
 - **nginx** — Reverse proxy + static SPA host; the only port published to the host (`HTTP_PORT`, default 5677)
 - **mcp-hn / mcp-arxiv / mcp-reddit** — `supergateway` wrapping each stdio MCP server as streamable HTTP (internal :8000, image `deploy/mcp/Dockerfile`)
-- **prometheus** / **grafana** — Monitoring stack
 
 Single surface: one `docker-compose.yaml`. The client image copies its build into a shared volume that nginx serves; the SPA falls back to `index.html` for deep links (e.g. `/auth/callback`).
 
@@ -66,7 +65,6 @@ Single surface: one `docker-compose.yaml`. The client image copies its build int
 | `/ready` | Readiness check (verifies DB connection) |
 | `/metrics` | Prometheus metrics |
 | `/ws` | WebSocket proxy |
-| `/grafana/`, `/prometheus/` | Monitoring UIs |
 
 ### Backend (`server/`)
 
