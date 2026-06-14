@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 from src.core.database import Base
+from src.models.postgres.types import EncryptedString
 
 
 class UserModel(Base):
@@ -19,6 +20,7 @@ class UserModel(Base):
     # --- GitHub OAuth identity (populated on "Connect via GitHub") ---
     github_id: Mapped[str | None] = mapped_column(String, unique=True, default=None)
     github_username: Mapped[str | None] = mapped_column(String, default=None)
-    # OAuth access token, stored as-is; treat as a secret. Used for GitHub API calls.
-    github_access_token: Mapped[str | None] = mapped_column(String, default=None)
+    # OAuth access token; treat as a secret. Encrypted at rest via EncryptedString
+    # when TOKEN_ENCRYPTION_KEY is set (otherwise stored plaintext). Used for GitHub API calls.
+    github_access_token: Mapped[str | None] = mapped_column(EncryptedString, default=None)
     avatar_url: Mapped[str | None] = mapped_column(String, default=None)
