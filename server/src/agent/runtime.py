@@ -64,7 +64,7 @@ async def build_profile(session: AsyncSession, user: UserModel, channel: Channel
 
 
 async def build_profile_safe(user_id: UUID, channel: Channel | None = None) -> None:
-    """Fire-and-forget profile build with its own session (first connect, /init, /rebuild)."""
+    """Fire-and-forget profile build with its own session (first connect, /init)."""
     try:
         async with AsyncSessionLocal() as session:
             user = await UserRepository(session).get_user(user_id)
