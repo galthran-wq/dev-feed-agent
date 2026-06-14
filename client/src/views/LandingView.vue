@@ -36,38 +36,46 @@ function connect() {
 .landing {
   display: flex;
   justify-content: center;
-  padding: 4rem 1.5rem;
+  padding: 5.5rem 1.5rem;
 }
 .hero {
-  max-width: 560px;
+  max-width: 34rem;
   text-align: center;
 }
 h1 {
-  font-size: 2.5rem;
-  margin: 0 0 0.25rem;
+  font-size: 2.75rem;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  margin: 0 0 0.6rem;
 }
 .tagline {
-  font-size: 1.125rem;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
   color: var(--color-text-muted);
-  margin: 0 0 1.5rem;
+  margin: 0 0 1.75rem;
 }
 .blurb {
-  line-height: 1.6;
-  color: var(--color-text);
-  margin: 0 0 2rem;
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  color: #374151;
+  margin: 0 auto 2.25rem;
+  max-width: 32rem;
 }
 .connect {
   display: inline-flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.75rem 1.25rem;
-  font-size: 1rem;
+  padding: 0.8rem 1.35rem;
+  font-size: 0.975rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
   color: #fff;
   background: #1f2328;
   border: none;
-  border-radius: 8px;
+  border-radius: 9px;
   cursor: pointer;
+  transition: background 0.15s ease;
 }
 .connect:hover {
   background: #000;
