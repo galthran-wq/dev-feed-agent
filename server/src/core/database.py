@@ -1,5 +1,7 @@
 from collections.abc import AsyncIterator
+from datetime import datetime
 
+from sqlalchemy import DateTime
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -7,7 +9,10 @@ from .config import settings
 
 
 class Base(DeclarativeBase):
-    pass
+    # Every Mapped[datetime] column is timezone-aware (timestamptz). The codebase writes
+    # aware datetime.now(UTC); a naive column makes asyncpg reject those on Postgres
+    # ("can't subtract offset-naive and offset-aware datetimes").
+    type_annotation_map = {datetime: DateTime(timezone=True)}
 
 
 postgres_engine = create_async_engine(
