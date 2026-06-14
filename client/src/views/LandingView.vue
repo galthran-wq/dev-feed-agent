@@ -2,7 +2,7 @@
 // The single public entry point: explain the product, then "Connect with GitHub".
 // The button hits the backend, which redirects to GitHub's OAuth consent screen.
 import logoUrl from '@/assets/logo.png'
-import AgentChatPreview from '@/components/AgentChatPreview.vue'
+import ChatExamples from '@/components/ChatExamples.vue'
 
 function connect() {
   window.location.href = '/api/auth/github/login'
@@ -38,7 +38,7 @@ function connect() {
 
     <section class="preview">
       <h2 class="preview-title">What lands in your Telegram</h2>
-      <AgentChatPreview />
+      <ChatExamples />
     </section>
 
     <footer class="foot">
