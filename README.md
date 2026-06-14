@@ -29,10 +29,10 @@ make build     # build images (server, client, MCP gateways)
 make up        # start everything
 ```
 
-App: `http://localhost:5746` · API docs: `http://localhost:5746/api/docs`
+App: `http://localhost:5677` · API docs: `http://localhost:5677/api/docs`
 
 Create a GitHub OAuth App (github.com/settings/developers) with callback URL
-`http://localhost:5746/api/auth/github/callback`.
+`http://localhost:5677/api/auth/github/callback`.
 
 The agent and Telegram delivery are **opt-in**: with no `OPENROUTER_API_KEY` the agent is off; with
 no `TELEGRAM_BOT_TOKEN` delivery is off. Each MCP source is skipped if its URL/token is unset.
@@ -51,7 +51,7 @@ no `TELEGRAM_BOT_TOKEN` delivery is off. Each MCP source is skipped if its URL/t
 ## Architecture
 
 ```
-nginx (reverse proxy, :5746)
+nginx (reverse proxy, :5677)
 ├── /                      → client (built Vue SPA, served static)
 ├── /api/*                 → server (FastAPI)  ── /api/auth/github/*  (OAuth)
 ├── /grafana/ /prometheus/ → monitoring

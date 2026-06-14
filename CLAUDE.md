@@ -46,10 +46,10 @@ cd client && npm run format       # Prettier
 
 ### Services (Docker Compose)
 
-- **postgres** — PostgreSQL 15 (host port: `POSTGRES_PORT_HOST`, default 5444)
+- **postgres** — PostgreSQL 15 (in-network only; no host port)
 - **server** — FastAPI on uvicorn (internal :8000); also runs the APScheduler feed job + Telegram bot
 - **client** — Vue 3; built to static and served by nginx (build-based, no dev server)
-- **nginx** — Reverse proxy + static SPA host (`HTTP_PORT`, default 5746)
+- **nginx** — Reverse proxy + static SPA host; the only port published to the host (`HTTP_PORT`, default 5677)
 - **mcp-hn / mcp-arxiv / mcp-reddit** — `supergateway` wrapping each stdio MCP server as streamable HTTP (internal :8000, image `deploy/mcp/Dockerfile`)
 - **prometheus** / **grafana** — Monitoring stack
 
@@ -130,7 +130,7 @@ Single surface: one `docker-compose.yaml`. The client image copies its build int
 1. Run `make setup` (creates `.env` from `.env.example`)
 2. Fill `.env`: `GITHUB_OAUTH_CLIENT_ID/_SECRET` (callback `${APP_BASE_URL}/api/auth/github/callback`), `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN/_USERNAME` + `TELEGRAM_WEBHOOK_SECRET` (Telegram is webhook-only and required; `APP_BASE_URL` must be a public HTTPS URL Telegram can reach), optionally `HF_TOKEN`
 3. `make build && make up`
-4. App at `http://localhost:5746`, API docs at `http://localhost:5746/api/docs`
+4. App at `http://localhost:5677`, API docs at `http://localhost:5677/api/docs`
 
 The agent (OpenRouter), Telegram delivery, and each MCP source are all **opt-in** — absent keys/URLs disable that piece cleanly.
 

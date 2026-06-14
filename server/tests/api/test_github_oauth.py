@@ -38,7 +38,7 @@ def test_state_cookie_value_is_sha256_hash() -> None:
 def test_cookie_secure_follows_app_base_url_scheme(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "app_base_url", "https://feed.example.com")
     assert github_oauth.cookie_secure() is True
-    monkeypatch.setattr(settings, "app_base_url", "http://localhost:5746")
+    monkeypatch.setattr(settings, "app_base_url", "http://localhost:5677")
     assert github_oauth.cookie_secure() is False
 
 
