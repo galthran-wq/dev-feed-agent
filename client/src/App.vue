@@ -12,6 +12,7 @@ import DefaultLayout from '@/layouts/DefaultLayout.vue'
   --color-border: #e5e7eb;
   --color-text: #111827;
   --color-text-muted: #6b7280;
+  --font-sans: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 *,
@@ -22,9 +23,12 @@ import DefaultLayout from '@/layouts/DefaultLayout.vue'
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Inter: enable contextual alternates + disable slashed-zero noise for clean body text. */
+  font-feature-settings: 'cv11', 'ss01';
 }
 
 a {
