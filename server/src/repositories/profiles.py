@@ -7,7 +7,7 @@ from src.models.postgres.profiles import PROFILE_SECTIONS, ProfileModel
 
 
 def render_markdown(sections: dict[str, str]) -> str:
-    """Render the sectioned profile to a stable markdown document."""
+    """Render the sectioned profile to a stable markdown document (fixed section order)."""
     parts: list[str] = []
     for name in PROFILE_SECTIONS:
         body = (sections.get(name) or "").strip()
@@ -42,9 +42,8 @@ class ProfileRepository:
         return profile is not None and profile.built_at is not None
 
     async def set_section(self, user_id: UUID, section: str, content: str) -> ProfileModel:
-        """Patch a single named section without touching the rest of the document."""
         profile = await self.get_or_create(user_id)
-        # JSON column is replaced wholesale so SQLAlchemy detects the change.
+        # Reassign the whole dict so SQLAlchemy detects the mutation on the JSON column.
         sections = dict(profile.sections)
         sections[section] = content
         profile.sections = sections
@@ -53,13 +52,13 @@ class ProfileRepository:
         return profile
 
     async def mark_built(self, user_id: UUID) -> None:
-        """Stamp the profile as built (called after the /init builder finishes)."""
+        """Stamp the profile as built."""
         profile = await self.get_or_create(user_id)
         profile.built_at = datetime.now(UTC)
         await self.session.commit()
 
     async def replace_all(self, user_id: UUID, sections: dict[str, str]) -> ProfileModel:
-        """Replace the whole profile (used by the /init profile builder) and stamp built_at."""
+        """Replace the whole profile and stamp built_at."""
         profile = await self.get_or_create(user_id)
         profile.sections = dict(sections)
         profile.built_at = datetime.now(UTC)

@@ -66,8 +66,6 @@ async def github_callback(
     cookie = request.cookies.get(github_oauth.STATE_COOKIE_NAME)
     if not github_oauth.state_matches_cookie(state, cookie) or not github_oauth.verify_state(state):
         logger.warning("github_oauth_state_rejected", has_cookie=bool(cookie))
-        # AppError yields a clean 400; the cookie is path-scoped, short-lived and
-        # single-use-by-binding, so a mismatched attempt can't be replayed anyway.
         raise AppError(status_code=400, detail="Invalid or expired OAuth state")
 
     try:

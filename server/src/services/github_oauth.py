@@ -39,7 +39,6 @@ class GithubUser(BaseModel):
 
 
 def issue_state() -> str:
-    """A signed, short-lived CSRF state token."""
     payload = {
         "nonce": secrets.token_urlsafe(8),
         "exp": datetime.now(UTC) + timedelta(minutes=_STATE_TTL_MINUTES),
@@ -56,28 +55,18 @@ def verify_state(state: str) -> bool:
 
 
 def state_cookie_value(state: str) -> str:
-    """The browser-bound cookie value: a SHA-256 hash of the state.
-
-    Storing the hash (not the raw state) keeps the full signed token out of the
-    cookie jar while still letting the callback prove the browser is the same one
-    that started the flow.
-    """
+    """Store the hash, not the raw signed token, to keep it out of the cookie jar."""
     return hashlib.sha256(state.encode()).hexdigest()
 
 
 def state_matches_cookie(state: str, cookie_value: str | None) -> bool:
-    """Constant-time check that the callback's ``state`` matches the cookie set at login."""
     if not cookie_value:
         return False
     return hmac.compare_digest(state_cookie_value(state), cookie_value)
 
 
 def cookie_secure() -> bool:
-    """Mark the cookie ``Secure`` whenever the app is served over HTTPS.
-
-    Derived from ``APP_BASE_URL`` (the public, nginx-fronted origin); a ``https``
-    scheme means TLS terminates at nginx, so the cookie must be HTTPS-only.
-    """
+    # APP_BASE_URL is the public nginx-fronted origin; https there means TLS terminates at nginx.
     return urlparse(settings.app_base_url).scheme == "https"
 
 
@@ -94,7 +83,6 @@ def build_authorize_url(state: str) -> str:
 
 
 async def exchange_code(code: str) -> str:
-    """Exchange an authorization code for a GitHub access token."""
     async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.post(
             _TOKEN_URL,

@@ -1,11 +1,7 @@
-"""Agent factories for dev-feed-agent.
+"""Agent factories.
 
-A fresh ``Agent`` is built per run (cheap — no network at construction) so there is no
-shared mutable state across concurrent requests; MCP connections open lazily inside
-``async with agent``. The model is OpenRouter via its OpenAI-compatible endpoint.
-
-``make_chat_agent`` is async because it *probes* its MCP sources first and wires in only
-the reachable ones — a single dead source must not abort the whole run (see ``mcp.py``).
+A fresh ``Agent`` per run avoids shared mutable state across concurrent requests.
+``make_chat_agent`` is async because it probes its MCP sources first (see ``mcp.py``).
 """
 
 from functools import lru_cache
@@ -33,7 +29,6 @@ def _model(name: str) -> OpenAIChatModel:
 
 
 def make_profile_agent() -> Agent[AgentDeps, str]:
-    """Explore-style sub-agent: walks GitHub and writes the sectioned profile."""
     return Agent(
         _model(settings.profile_model),
         deps_type=AgentDeps,
@@ -43,7 +38,6 @@ def make_profile_agent() -> Agent[AgentDeps, str]:
 
 
 def make_summarizer_agent() -> Agent[None, str]:
-    """No-tools agent used by /compact to summarize prior history into a short note."""
     return Agent(
         _model(settings.agent_model),
         system_prompt=(
@@ -55,13 +49,7 @@ def make_summarizer_agent() -> Agent[None, str]:
 
 
 async def make_chat_agent() -> Agent[AgentDeps, str]:
-    """The one memory-aware agent: handles Telegram chat AND assembles the scheduled
-    feed (driven by a synthetic turn). Free-form text out; it records what it surfaces
-    via the record_feed_items tool. Can call all tools + MCP sources.
-
-    Probes the configured MCP sources first and wires in only the reachable ones, so an
-    unreachable source is skipped (logged) rather than aborting the run.
-    """
+    """Wires in only reachable MCP sources so a dead one is skipped, not fatal to the run."""
     return Agent(
         _model(settings.agent_model),
         deps_type=AgentDeps,

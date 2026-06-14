@@ -1,18 +1,7 @@
 """Build the MCP toolsets the agent talks to.
 
-HuggingFace is a remote HTTP MCP; Hacker News / arXiv / Reddit / Perplexity are local
-gateway containers (supergateway wraps their stdio servers as streamable HTTP). Each
-source is opt-in: a source with no configured URL (or token, for HF) is simply skipped.
-Perplexity is additionally API-key-gated (its key is injected into its gateway container,
-not used by the agent), so it stays absent unless explicitly configured.
-
-A configured source may still be *unreachable* at run time (gateway container down,
-HF outage). pydantic-ai opens every toolset together inside ``async with agent``, so a
-single dead endpoint would otherwise abort the whole chat/curate run. To stay resilient
-we *probe* each server first (open it with a short timeout) and keep only the ones that
-answer; dead sources are logged and dropped. The surviving servers are reopened by the
-agent for the real run — the MCP connection is reference-counted, so the probe leaves no
-state behind.
+pydantic-ai opens every toolset together inside ``async with agent``, so one dead endpoint
+would abort the whole run. We probe each server first and keep only the ones that answer.
 """
 
 import asyncio
@@ -25,7 +14,6 @@ logger = structlog.get_logger()
 
 
 def build_mcp_servers() -> list[MCPServerStreamableHTTP]:
-    """Instantiate every *configured* MCP server (no network — construction is cheap)."""
     servers: list[MCPServerStreamableHTTP] = []
 
     if settings.hf_mcp_url and settings.hf_token:
@@ -36,14 +24,12 @@ def build_mcp_servers() -> list[MCPServerStreamableHTTP]:
                 timeout=settings.mcp_probe_timeout,
             )
         )
-    # Gateway-container sources (supergateway re-exposes a stdio server as HTTP). Each
-    # carries its own auth inside the container, so the agent connects with no header.
+    # Gateway containers carry their own auth, so the agent connects with no header.
     for url in (settings.mcp_hn_url, settings.mcp_arxiv_url, settings.mcp_reddit_url):
         if url:
             servers.append(MCPServerStreamableHTTP(url=url, timeout=settings.mcp_probe_timeout))
 
-    # Perplexity is API-key-gated and opt-in (started via the `perplexity` compose
-    # profile); `perplexity_enabled` is the single source of truth for the gate.
+    # Perplexity is API-key-gated and opt-in (started via the `perplexity` compose profile).
     if settings.perplexity_enabled:
         servers.append(MCPServerStreamableHTTP(url=settings.mcp_perplexity_url, timeout=settings.mcp_probe_timeout))
 
@@ -52,12 +38,10 @@ def build_mcp_servers() -> list[MCPServerStreamableHTTP]:
 
 
 async def _probe_one(server: MCPServerStreamableHTTP, timeout: float) -> bool:
-    """Open ``server`` (connect + ``initialize`` handshake) and close it again.
+    """True if ``server`` answers within ``timeout``; never raises (unreachable is a soft skip).
 
-    Returns True if it answered within ``timeout`` seconds, False otherwise. Never
-    raises — an unreachable source is a soft failure we log and skip. The server's own
-    ``timeout`` already bounds the handshake; the outer ``asyncio.timeout`` is a
-    belt-and-braces bound in case the transport hangs before the handshake starts.
+    The outer ``asyncio.timeout`` backstops the server's own handshake timeout in case the
+    transport hangs before the handshake even starts.
     """
     try:
         async with asyncio.timeout(timeout):
@@ -74,15 +58,11 @@ async def reachable_mcp_servers(
 ) -> list[MCPServerStreamableHTTP]:
     """Return only the configured MCP servers that respond to a probe.
 
-    A dead source is dropped (logged) rather than allowed to abort the whole agent run.
-    Probes run concurrently, so added latency is ~``mcp_probe_timeout`` worst case, not
-    the sum across sources. An all-unreachable set yields ``[]`` (the agent simply runs
-    without MCP tools) instead of raising.
+    Probes run concurrently, so added latency is ~``mcp_probe_timeout`` worst case, not the sum.
 
-    Caveat: this is a probe-then-use check, so a source that passes the probe but dies in
-    the brief window before the agent re-opens it can still abort that run; the window is
-    small and the alternative (a tolerant toolset wrapper) needs upstream support. Each
-    healthy source also pays two connect+handshakes per run (probe + real open).
+    Caveat: probe-then-use, so a source that passes the probe but dies before the agent
+    re-opens it can still abort that run (the alternative, a tolerant toolset wrapper, needs
+    upstream support). Each healthy source pays two connect+handshakes per run.
     """
     if servers is None:
         servers = build_mcp_servers()

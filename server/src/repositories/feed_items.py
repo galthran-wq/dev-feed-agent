@@ -10,7 +10,7 @@ class FeedItemRepository:
         self.session = session
 
     async def filter_unseen(self, user_id: UUID, keys: list[tuple[str, str]]) -> set[tuple[str, str]]:
-        """Given ``(source, external_id)`` keys, return the subset not yet delivered to the user."""
+        """Return the subset of ``(source, external_id)`` keys not yet delivered to the user."""
         if not keys:
             return set()
         sources = {s for s, _ in keys}

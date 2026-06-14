@@ -10,8 +10,6 @@ logger = structlog.get_logger()
 
 
 class DomainError(Exception):
-    """Base class for all domain/business-logic errors."""
-
     def __init__(self, detail: str) -> None:
         self.detail = detail
         super().__init__(detail)
