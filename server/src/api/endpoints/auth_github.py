@@ -7,6 +7,7 @@ import structlog
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from src.agent.channels import Channel, TelegramChannel
 from src.core.auth import create_token_for_user
 from src.core.config import settings
 from src.core.database import get_postgres_session
@@ -18,6 +19,15 @@ from src.services import github_oauth
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/api/auth/github", tags=["auth"])
+
+
+async def _notify_linked(channel: Channel) -> None:
+    """Contained background notice — a failed Telegram send must not surface as an
+    orphaned-task exception (login already succeeded)."""
+    try:
+        await channel.send("✅ Linked to GitHub! I’ll send your feed here — chat anytime to steer it.")
+    except Exception as exc:
+        logger.warning("github_oauth_tg_notice_failed", error=str(exc))
 
 
 def _clear_state_cookie(response: RedirectResponse) -> None:
@@ -86,17 +96,13 @@ async def github_callback(
 
     # Telegram-initiated login: auto-link this chat to the user (no /start code needed),
     # and route the profile build's "ready" message back to that chat.
-    channel = None
+    channel: Channel | None = None
     tg_chat = github_oauth.state_tg_chat(state)
     if tg_chat:
         linked = await ConnectionRepository(session).link_chat_to_user(user.id, tg_chat)
         if linked:
-            from src.agent.channels import TelegramChannel
-
             channel = TelegramChannel(tg_chat)
-            asyncio.create_task(  # noqa: RUF006
-                channel.send("✅ Linked to GitHub! I’ll send your feed here — chat anytime to steer it.")
-            )
+            asyncio.create_task(_notify_linked(channel))  # noqa: RUF006
         else:
             logger.warning("github_oauth_tg_link_refused", user_id=str(user.id))
 

@@ -58,8 +58,9 @@ class ConnectionRepository:
     async def link_chat_to_user(self, user_id: UUID, chat_id: str) -> bool:
         """Bind a Telegram chat to ``user_id`` directly (the Telegram-initiated GitHub login).
 
-        Anti-hijack: refuse if the chat is already linked to a *different* user. Idempotent
-        if it's already this user's. Returns True on link, False on refusal.
+        One chat per user: this (re-)points the user's connection to ``chat_id`` — logging in
+        from a new chat moves delivery there (latest wins). Anti-hijack: refuse if the chat is
+        already linked to a *different* user. Returns True on link, False on refusal.
         """
         existing = await self.get_by_telegram_chat_id(chat_id)
         if existing is not None and existing.user_id != user_id:

@@ -37,6 +37,15 @@ async def test_link_chat_to_user_links_and_is_idempotent(db_session: AsyncSessio
     assert await repo.link_chat_to_user(test_user.id, "chat-1") is True
 
 
+async def test_link_chat_repoints_same_user(db_session: AsyncSession, test_user: UserModel) -> None:
+    # Logging in from a new chat moves delivery there (latest wins, one chat per user).
+    repo = ConnectionRepository(db_session)
+    assert await repo.link_chat_to_user(test_user.id, "chat-a") is True
+    assert await repo.link_chat_to_user(test_user.id, "chat-b") is True
+    conn = await repo.get_by_user_id(test_user.id)
+    assert conn is not None and conn.telegram_chat_id == "chat-b"
+
+
 async def test_link_chat_refuses_other_user(
     db_session: AsyncSession, test_user: UserModel, superuser: UserModel
 ) -> None:
