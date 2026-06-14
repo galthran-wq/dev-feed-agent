@@ -1,4 +1,4 @@
-# dev-feed-agent
+# devfeed.fyi
 
 A personalized, **agentic news feed for developers & ML engineers**. Connect your GitHub and the
 agent learns what you build, then watches GitHub, HuggingFace, Hacker News, arXiv and Reddit and
