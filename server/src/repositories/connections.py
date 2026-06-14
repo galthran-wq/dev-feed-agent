@@ -55,6 +55,26 @@ class ConnectionRepository:
         await self.session.refresh(conn)
         return conn
 
+    async def link_chat_to_user(self, user_id: UUID, chat_id: str) -> bool:
+        """Bind a Telegram chat to ``user_id`` directly (the Telegram-initiated GitHub login).
+
+        Anti-hijack: refuse if the chat is already linked to a *different* user. Idempotent
+        if it's already this user's. Returns True on link, False on refusal.
+        """
+        existing = await self.get_by_telegram_chat_id(chat_id)
+        if existing is not None and existing.user_id != user_id:
+            return False
+        conn = await self.get_or_create(user_id)
+        conn.telegram_chat_id = chat_id
+        conn.telegram_link_code = _link_code()  # rotate any outstanding /start code
+        try:
+            await self.session.commit()
+        except IntegrityError:
+            await self.session.rollback()
+            return False
+        await self.session.refresh(conn)
+        return True
+
     async def mark_fed(self, conn: ConnectionModel) -> None:
         conn.last_feed_at = datetime.now(UTC)
         await self.session.commit()

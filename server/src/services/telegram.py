@@ -2,10 +2,12 @@
 process_incoming. Outbound delivery is a channel (agent/channels/telegram.py)."""
 
 import structlog
-from src.agent.channels import TelegramChannel
+from src.agent.channels import TelegramChannel, get_bot
+from src.core.config import settings
 from src.core.database import AsyncSessionLocal
 from src.repositories.connections import ConnectionRepository
 from src.repositories.users import UserRepository
+from src.services import github_oauth
 from src.services.messaging import GENERIC_ERROR, process_incoming
 
 logger = structlog.get_logger()
@@ -13,12 +15,29 @@ logger = structlog.get_logger()
 _NOT_LINKED = "This chat isn't linked yet. Link it from the web app first."
 
 
+async def _send_login_prompt(chat_id: str) -> None:
+    """Greet an unlinked chat with a one-tap 'Login with GitHub' button (signed so the chat
+    id can't be forged). Falls back to the web-app message if OAuth isn't configured."""
+    if not settings.github_oauth_enabled:
+        await TelegramChannel(chat_id).send(_NOT_LINKED)
+        return
+    token = github_oauth.issue_tg_link_token(chat_id)
+    url = f"{settings.app_base_url.rstrip('/')}/api/auth/github/login?tg={token}"
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔗 Login with GitHub", url=url)]])
+    await get_bot().send_message(
+        chat_id,
+        "👋 I'm dev-feed-agent — a personalized feed of repos, issues, papers and "
+        "discussions for devs & ML engineers, delivered right here.\n\nConnect your GitHub to start:",
+        reply_markup=keyboard,
+        disable_web_page_preview=True,
+    )
+
+
 async def _handle_start(channel: TelegramChannel, chat_id: str, code: str) -> None:
     if not code:
-        await channel.send(
-            "👋 I'm dev-feed-agent. I deliver a personalized feed of repos, issues, "
-            "papers and discussions.\nOpen the web app and tap “Go to Telegram” to link this chat."
-        )
+        await _send_login_prompt(chat_id)
         return
     async with AsyncSessionLocal() as session:
         linked = await ConnectionRepository(session).link_telegram(code, chat_id)
@@ -45,7 +64,7 @@ async def handle_update(chat_id: str, text: str) -> None:
         async with AsyncSessionLocal() as session:
             conn = await ConnectionRepository(session).get_by_telegram_chat_id(chat_id)
             if conn is None:
-                await channel.send(_NOT_LINKED)
+                await _send_login_prompt(chat_id)
                 return
             user = await UserRepository(session).get_user(conn.user_id)
             if user is None:  # connection exists but user gone — shouldn't happen

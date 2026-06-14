@@ -23,6 +23,7 @@ _AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 _TOKEN_URL = "https://github.com/login/oauth/access_token"
 _USER_URL = "https://api.github.com/user"
 _STATE_TTL_MINUTES = 10
+_TG_LINK_TTL_MINUTES = 15
 
 #: Name of the HttpOnly cookie that binds the OAuth ``state`` to the browser.
 STATE_COOKIE_NAME = "gh_oauth_state"
@@ -38,11 +39,15 @@ class GithubUser(BaseModel):
     avatar_url: str | None = None
 
 
-def issue_state() -> str:
-    payload = {
+def issue_state(tg_chat: str | None = None) -> str:
+    payload: dict[str, object] = {
         "nonce": secrets.token_urlsafe(8),
         "exp": datetime.now(UTC) + timedelta(minutes=_STATE_TTL_MINUTES),
     }
+    # When the login was started from Telegram, carry the chat through the (signed) state
+    # so the callback can link this chat to the resolved GitHub user.
+    if tg_chat:
+        payload["tg_chat"] = str(tg_chat)
     return str(jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm))
 
 
@@ -52,6 +57,35 @@ def verify_state(state: str) -> bool:
         return True
     except JWTError:
         return False
+
+
+def state_tg_chat(state: str) -> str | None:
+    """The Telegram chat id carried in a (verified) state, if the login began in Telegram."""
+    try:
+        payload = jwt.decode(state, settings.secret_key, algorithms=[settings.jwt_algorithm])
+    except JWTError:
+        return None
+    chat = payload.get("tg_chat")
+    return str(chat) if chat else None
+
+
+def issue_tg_link_token(chat_id: str) -> str:
+    """Signed, short-lived token the bot puts in the 'Login with GitHub' button URL, so the
+    chat id reaching ``/login`` is authentic (not a forged ``?tg=<anyone>``)."""
+    payload = {
+        "tg_chat": str(chat_id),
+        "exp": datetime.now(UTC) + timedelta(minutes=_TG_LINK_TTL_MINUTES),
+    }
+    return str(jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm))
+
+
+def read_tg_link_token(token: str) -> str | None:
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
+    except JWTError:
+        return None
+    chat = payload.get("tg_chat")
+    return str(chat) if chat else None
 
 
 def state_cookie_value(state: str) -> str:
