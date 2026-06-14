@@ -16,17 +16,6 @@ class TelegramLinkResponse(BaseModel):
     bot_configured: bool
 
 
-class RebuildResponse(BaseModel):
-    status: str
-    message: str
-
-
-class PollNowResponse(BaseModel):
-    delivered: int
-    curated: int
-    message: str
-
-
 class MessageRequest(BaseModel):
     message: str
 

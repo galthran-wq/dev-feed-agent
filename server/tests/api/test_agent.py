@@ -21,21 +21,6 @@ async def test_telegram_link_without_bot(auth_client: AsyncClient) -> None:
     assert body["url"] is None
 
 
-async def test_rebuild_requires_github(auth_client: AsyncClient) -> None:
-    # No github_username on the user -> 400 before any agent work.
-    resp = await auth_client.post("/api/agent/rebuild")
-    assert resp.status_code == 400
-
-
-async def test_poll_now_without_setup(auth_client: AsyncClient) -> None:
-    # No github identity -> the feed pass returns early, no network calls.
-    resp = await auth_client.post("/api/agent/poll-now")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["delivered"] == 0
-    assert body["curated"] == 0
-
-
 async def test_post_message_returns_collected_agent_messages(
     auth_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
