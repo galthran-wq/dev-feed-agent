@@ -12,7 +12,7 @@ class Base(DeclarativeBase):
 
 postgres_engine = create_async_engine(
     settings.postgres_url,
-    echo=settings.is_debug,
+    echo=False,
     pool_size=20,
     max_overflow=10,
     pool_pre_ping=True,

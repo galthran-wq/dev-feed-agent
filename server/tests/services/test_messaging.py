@@ -1,7 +1,5 @@
-from uuid import uuid4
-
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.agent import runtime
 from src.agent.channels import CollectingChannel
 from src.core import config
@@ -10,11 +8,10 @@ from src.services import messaging
 
 
 @pytest.fixture
-def _wire(db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> dict:
-    """Point process_incoming's own-session at the test engine, enable the agent, and
-    stub the runtime entry points so we assert dispatch (not LLM behavior)."""
-    maker = async_sessionmaker(db_session.bind, class_=AsyncSession, expire_on_commit=False)
-    monkeypatch.setattr(messaging, "AsyncSessionLocal", maker)
+def _wire(monkeypatch: pytest.MonkeyPatch) -> dict:
+    """Enable the agent and stub the runtime entry points so we assert dispatch (not LLM
+    behavior). process_incoming no longer owns a session or resolves the user — the caller
+    passes both — so there's nothing to wire there."""
     monkeypatch.setattr(config.settings, "openrouter_api_key", "test-key")  # agent_enabled
 
     calls: dict = {}
@@ -40,34 +37,41 @@ def _wire(db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> dict:
     return calls
 
 
-async def test_dispatch_reset(_wire: dict, test_user: UserModel) -> None:
+async def test_dispatch_reset(_wire: dict, db_session: AsyncSession, test_user: UserModel) -> None:
     ch = CollectingChannel()
-    await messaging.process_incoming(ch, test_user.id, "/reset")
+    await messaging.process_incoming(ch, db_session, test_user, "/reset")
     assert _wire["reset"] == test_user.id
     assert any("Cleared" in m for m in ch.messages)
 
 
-async def test_dispatch_compact(_wire: dict, test_user: UserModel) -> None:
+async def test_dispatch_compact(_wire: dict, db_session: AsyncSession, test_user: UserModel) -> None:
     ch = CollectingChannel()
-    await messaging.process_incoming(ch, test_user.id, "/compact")
+    await messaging.process_incoming(ch, db_session, test_user, "/compact")
     assert _wire["compact"] == test_user.id
     assert any("carried summary" in m for m in ch.messages)
 
 
-async def test_dispatch_init(_wire: dict, test_user: UserModel) -> None:
+async def test_dispatch_init(_wire: dict, db_session: AsyncSession, test_user: UserModel) -> None:
     ch = CollectingChannel()
-    await messaging.process_incoming(ch, test_user.id, "/init")
+    await messaging.process_incoming(ch, db_session, test_user, "/init")
     assert _wire["build"] == test_user.id
 
 
-async def test_dispatch_free_text_goes_to_chat(_wire: dict, test_user: UserModel) -> None:
+async def test_dispatch_free_text_goes_to_chat(_wire: dict, db_session: AsyncSession, test_user: UserModel) -> None:
     ch = CollectingChannel()
-    await messaging.process_incoming(ch, test_user.id, "any rust news?")
+    await messaging.process_incoming(ch, db_session, test_user, "any rust news?")
     assert _wire["chat"] == "any rust news?"
     assert ch.messages == ["agent reply"]
 
 
-async def test_unknown_user_is_told_to_link(_wire: dict) -> None:
+async def test_chat_failure_is_caught_and_apologized(
+    _wire: dict, db_session: AsyncSession, test_user: UserModel, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def boom(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("kaboom")
+
+    monkeypatch.setattr(runtime, "chat", boom)
     ch = CollectingChannel()
-    await messaging.process_incoming(ch, uuid4(), "hi")
-    assert any("isn't linked" in m for m in ch.messages)
+    # Must not raise; the user gets the shared apology.
+    await messaging.process_incoming(ch, db_session, test_user, "hi")
+    assert ch.messages == [messaging.GENERIC_ERROR]

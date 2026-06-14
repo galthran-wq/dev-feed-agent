@@ -73,13 +73,13 @@ Single surface: one `docker-compose.yaml`. The client image copies its build int
 - **Python 3.12**, FastAPI, async SQLAlchemy 2.0 + asyncpg, Alembic migrations
 - **Package management**: uv + pyproject.toml (not pip/requirements.txt)
 - Entry point: `src/main.py` — app factory pattern (`create_app()`)
-- Config: `src/core/config.py` — pydantic-settings, `extra="ignore"`, env vars injected via Docker Compose `env_file`, `SECRET_KEY` required (no default), `is_debug` derived from `LOG_LEVEL`
+- Config: `src/core/config.py` — pydantic-settings, `extra="ignore"`, env vars injected via Docker Compose `env_file`, `SECRET_KEY` required (no default); `LOG_LEVEL` controls log verbosity
 - Database: `src/core/database.py` — async engine with connection pooling, `AsyncSessionLocal`, `get_postgres_session` dependency
 - Auth: `src/core/auth.py` — JWT bearer tokens, `get_current_user` / `get_current_superuser` dependencies
 - Models: `src/models/postgres/` — SQLAlchemy models; register new models in `__init__.py` for Alembic autogenerate
 - API routing: `src/api/router.py` aggregates all endpoint routers; individual endpoints in `src/api/endpoints/`
 - Repository pattern: `src/repositories/` — abstract base + concrete implementations
-- Logging: structlog (JSON in prod, console in dev), request ID tracking via middleware
+- Logging: structlog (JSON, always), request ID tracking via middleware
 - Metrics: prometheus-fastapi-instrumentator (auto-instrumented, exposed at `/metrics`)
 - Exceptions: `src/core/exceptions.py` — `AppError(status_code, detail)` for business logic errors
 - Middleware: `src/core/middleware.py` — CORS (outermost), then request logging, then request ID (innermost)
