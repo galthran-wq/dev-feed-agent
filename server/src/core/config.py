@@ -6,7 +6,7 @@ class Settings(BaseSettings):
 
     app_name: str = "dev-feed-agent"
     log_level: str = "info"
-    cors_origins: list[str] = ["http://localhost:5746"]
+    cors_origins: list[str] = ["http://localhost:5677"]
     metrics_enabled: bool = True
 
     postgres_user: str = "postgres"
@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     # Public URL of the app — used to build the GitHub OAuth callback and the
     # post-login redirect back to the SPA, and the Telegram deep link.
-    app_base_url: str = "http://localhost:5746"
+    app_base_url: str = "http://localhost:5677"
 
     # --- GitHub OAuth (the only sign-in path for dev-feed-agent) ---
     github_oauth_client_id: str = ""
