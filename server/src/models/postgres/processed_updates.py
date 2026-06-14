@@ -11,6 +11,11 @@ class ProcessedUpdateModel(Base):
     Telegram delivers webhook updates at-least-once (it re-sends until it gets a 2XX, and
     can redeliver across restarts). Agent runs have non-idempotent side effects (sent
     messages, recorded feed items), so we dedup on ``update_id`` before processing.
+
+    Tradeoffs (acceptable for a feed bot): marking-before-processing makes delivery
+    at-most-once if the process dies mid-handle; and this table grows one row per inbound
+    message with no TTL — a periodic prune (e.g. drop rows older than a few days) is a
+    follow-up if it ever matters.
     """
 
     __tablename__ = "processed_updates"

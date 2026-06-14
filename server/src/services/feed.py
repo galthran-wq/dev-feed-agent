@@ -32,13 +32,11 @@ async def run_for_user(session: AsyncSession, conn: ConnectionModel, *, channel:
     if not await ProfileRepository(session).is_built(conn.user_id):
         return FeedResult(0, 0, "profile not built yet")
 
-    new_items = await runtime.curate_feed(session, user, channel)
+    new_items, sent = await runtime.curate_feed(session, user, channel)
     await ConnectionRepository(session).mark_fed(conn)
     if new_items == 0:
         return FeedResult(0, 0, "no new matches")
 
-    # The agent delivers via the channel itself; "delivered" reflects that a channel was
-    # available to send through.
-    delivered = new_items if channel is not None else 0
-    log.info("feed_pass_done", curated=new_items, delivered=delivered)
-    return FeedResult(delivered, new_items)
+    # The agent delivers via the channel itself; "delivered" reflects what it actually sent.
+    log.info("feed_pass_done", curated=new_items, delivered=sent)
+    return FeedResult(sent, new_items)

@@ -102,7 +102,8 @@ Single surface: one `docker-compose.yaml`. The client image copies its build int
 - `messaging.py` — `process_incoming(channel, user_id, text)`: the single, channel-agnostic entry point for an inbound message (command dispatch `/init`·`/reset`·`/compact` + free text → chat agent). Both the Telegram webhook and `POST /api/agent/message` funnel through it; opens its own session so it can run detached (the webhook fast-acks via `asyncio.create_task`).
 - `feed.py` — one per-user pass: `curate_feed(channel)` (the agent delivers via `send_message`) → mark fed (error-contained).
 - `scheduler.py` — APScheduler hourly job over all feedable connections; builds a `TelegramChannel` per user; fresh session per user, never raises.
-- `telegram_bot.py` — **webhook-only** (no polling): `POST /api/telegram/webhook` (`src/api/endpoints/telegram.py`) verifies the secret, dedups `update_id` (`processed_updates`), fast-acks 200, and schedules `handle_update` → `process_incoming`. `/start <code>` links the chat. `setup_webhook`/`remove_webhook` register the webhook on startup/shutdown. Telegram is **required** (the app raises at startup without `TELEGRAM_BOT_TOKEN` + `TELEGRAM_WEBHOOK_SECRET`). `notifier.py` sends plain, chunked text.
+- `channels.py` — Telegram delivery: the shared aiogram `Bot` (`get_bot`), message chunking, the `TelegramChannel` adapter, and webhook registration (`setup_webhook`/`remove_webhook`, called from the lifespan). There is **no** `telegram_bot.py` and no polling.
+- **Telegram is webhook-only** and **required**: `POST /api/telegram/webhook` (`src/api/endpoints/telegram.py`) verifies the secret, dedups `update_id` (`processed_updates`), fast-acks 200, then schedules `handle_update` → `process_incoming` (`/start <code>` links the chat; `handle_update` also lives in that endpoint module). The app raises at startup without `TELEGRAM_BOT_TOKEN` + `TELEGRAM_WEBHOOK_SECRET` (and a public HTTPS `APP_BASE_URL`).
 
 ### Frontend (`client/`)
 

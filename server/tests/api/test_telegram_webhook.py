@@ -2,8 +2,8 @@ import asyncio
 
 import pytest
 from httpx import AsyncClient
+from src.api.endpoints import telegram as tg_ep
 from src.core import config
-from src.services import telegram_bot
 
 _SECRET = "test-webhook-secret"
 _HDR = "X-Telegram-Bot-Api-Secret-Token"
@@ -36,7 +36,7 @@ async def test_processes_once_and_dedups(client: AsyncClient, monkeypatch: pytes
     async def fake_handle(chat_id: str, text: str) -> None:
         calls.append((chat_id, text))
 
-    monkeypatch.setattr(telegram_bot, "handle_update", fake_handle)
+    monkeypatch.setattr(tg_ep, "handle_update", fake_handle)
 
     payload = _update(42, text="hello")
     r1 = await client.post("/api/telegram/webhook", json=payload, headers={_HDR: _SECRET})

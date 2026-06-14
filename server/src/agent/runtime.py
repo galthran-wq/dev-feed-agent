@@ -117,12 +117,13 @@ async def reset(session: AsyncSession, user: UserModel) -> None:
     logger.info("history_reset", user_id=str(user.id))
 
 
-async def curate_feed(session: AsyncSession, user: UserModel, channel: Channel | None = None) -> int:
+async def curate_feed(session: AsyncSession, user: UserModel, channel: Channel | None = None) -> tuple[int, int]:
     """Assemble the feed as a synthetic turn through the shared agent.
 
     The agent gathers candidates, records them via record_feed_items (the dedup ledger),
     and — if there's anything fresh worth sending — delivers the digest via send_message
-    (``channel``). Returns the number of newly-recorded items (0 = nothing fresh).
+    (``channel``). Returns ``(new_items, sent)`` — items newly recorded and messages the
+    agent actually sent this run (the caller's "delivered" should reflect ``sent``).
     """
     _require_agent()
     profile_md = await ProfileRepository(session).get_markdown(user.id)
@@ -156,4 +157,4 @@ async def curate_feed(session: AsyncSession, user: UserModel, channel: Channel |
         # Recorded items but sent nothing — the digest was dropped; surface it.
         logger.warning("feed_recorded_without_send", user_id=str(user.id), new_items=new_items)
     logger.info("feed_curated", user_id=str(user.id), new_items=new_items, sent=deps.sent_count)
-    return new_items
+    return new_items, deps.sent_count
