@@ -15,11 +15,13 @@ function connect() {
       <h1>dev-feed-agent</h1>
       <p class="tagline">A personalized, agentic feed for developers &amp; ML engineers.</p>
 
+      <p class="blurb lead">
+        Connect your GitHub and the agent reads what you build to learn your interests.
+      </p>
       <p class="blurb">
-        Connect your GitHub and the agent reads what you build to learn your interests. Then it
-        watches GitHub, HuggingFace, Hacker News, arXiv and Reddit and sends you a hand-picked feed
-        — projects, good-first-issues, help-wanted tickets, papers and discussions — straight to
-        Telegram. Chat with it anytime to steer what you see.
+        Then it watches GitHub, HuggingFace, Hacker News, arXiv and Reddit and sends you a
+        hand-picked feed — projects, good-first-issues, help-wanted tickets, papers and discussions
+        — straight to Telegram. Chat with it anytime to steer what you see.
       </p>
 
       <button class="connect" @click="connect">
@@ -67,11 +69,16 @@ h1 {
 }
 .blurb {
   font-size: 1.0625rem;
-  line-height: 1.65;
+  line-height: 1.6;
   color: #374151;
-  margin: 0 auto 2.25rem;
+  margin: 0 auto 1.1rem;
   max-width: 30rem;
-  text-align: left;
+}
+.blurb.lead {
+  color: var(--color-text);
+}
+.blurb:last-of-type {
+  margin-bottom: 2.25rem;
 }
 .connect {
   display: inline-flex;
