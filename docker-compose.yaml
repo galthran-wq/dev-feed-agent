@@ -125,6 +125,26 @@ services:
       - app-network
     restart: unless-stopped
 
+  # Optional, API-key-gated web-grounded source (the official @perplexity-ai/mcp-server).
+  # Behind the `perplexity` compose profile, so a default `make up` does NOT start it.
+  # The upstream server calls process.exit(1) when PERPLEXITY_API_KEY is empty, so running
+  # it without a key would crash-loop — the profile keeps it off until you opt in with:
+  #   docker compose --profile perplexity up -d   (and set PERPLEXITY_API_KEY + MCP_PERPLEXITY_URL)
+  # The agent only wires the source when MCP_PERPLEXITY_URL is set, so it stays skipped
+  # otherwise. PERPLEXITY_API_KEY is read from .env and handed to the stdio child; nothing
+  # else passes a Perplexity credential.
+  mcp-perplexity:
+    image: dev-feed-mcp-gateway:latest
+    profiles: ["perplexity"]
+    build:
+      context: ./deploy/mcp
+    environment:
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+    command: ["sh", "-lc", "npx -y supergateway@3.4.3 --stdio \"npx -y @perplexity-ai/mcp-server\" --outputTransport streamableHttp --port 8000 --streamableHttpPath /mcp"]
+    networks:
+      - app-network
+    restart: unless-stopped
+
 networks:
   app-network:
     driver: bridge

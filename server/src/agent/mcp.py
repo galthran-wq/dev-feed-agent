@@ -1,8 +1,10 @@
 """Build the MCP toolsets the agent talks to.
 
-HuggingFace is a remote HTTP MCP; Hacker News / arXiv / Reddit are local gateway
-containers (supergateway wraps their stdio servers as streamable HTTP). Each source
-is opt-in: a source with no configured URL (or token, for HF) is simply skipped.
+HuggingFace is a remote HTTP MCP; Hacker News / arXiv / Reddit / Perplexity are local
+gateway containers (supergateway wraps their stdio servers as streamable HTTP). Each
+source is opt-in: a source with no configured URL (or token, for HF) is simply skipped.
+Perplexity is additionally API-key-gated (its key is injected into its gateway container,
+not used by the agent), so it stays absent unless explicitly configured.
 
 A configured source may still be *unreachable* at run time (gateway container down,
 HF outage). pydantic-ai opens every toolset together inside ``async with agent``, so a
@@ -34,9 +36,16 @@ def build_mcp_servers() -> list[MCPServerStreamableHTTP]:
                 timeout=settings.mcp_probe_timeout,
             )
         )
+    # Gateway-container sources (supergateway re-exposes a stdio server as HTTP). Each
+    # carries its own auth inside the container, so the agent connects with no header.
     for url in (settings.mcp_hn_url, settings.mcp_arxiv_url, settings.mcp_reddit_url):
         if url:
             servers.append(MCPServerStreamableHTTP(url=url, timeout=settings.mcp_probe_timeout))
+
+    # Perplexity is API-key-gated and opt-in (started via the `perplexity` compose
+    # profile); `perplexity_enabled` is the single source of truth for the gate.
+    if settings.perplexity_enabled:
+        servers.append(MCPServerStreamableHTTP(url=settings.mcp_perplexity_url, timeout=settings.mcp_probe_timeout))
 
     logger.info("mcp_servers_configured", count=len(servers))
     return servers
