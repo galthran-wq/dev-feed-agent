@@ -6,11 +6,11 @@ scheduled job itself never raises (which would otherwise drop the job)."""
 from typing import Any
 
 import structlog
+from src.agent.channels import TelegramChannel
 from src.core.config import settings
 from src.core.database import AsyncSessionLocal
 from src.repositories.connections import ConnectionRepository
 from src.services import feed
-from src.services.channels import TelegramChannel
 
 logger = structlog.get_logger()
 

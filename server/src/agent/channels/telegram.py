@@ -1,10 +1,11 @@
-"""Telegram delivery: the shared Bot client, message chunking, and the ``TelegramChannel``
-adapter that implements the agent's :class:`src.agent.channels.Channel` over it.
+"""Telegram output channel: the shared Bot client, message chunking, and the
+``TelegramChannel`` adapter that implements :class:`Channel` over a Telegram chat.
 
-This is the services-side counterpart to the abstract ``Channel`` in the agent layer.
-``get_bot`` is the one aiogram ``Bot`` instance, reused both for sending and for webhook
-registration (``setup_webhook``/``remove_webhook`` below). A future web/SSE channel would
-live here too. Inbound updates are handled by the webhook endpoint (``api/endpoints/telegram.py``).
+This is one concrete adapter for the :class:`Channel` port (see ``base.py``). ``get_bot``
+is the one aiogram ``Bot`` instance, reused both for sending and for webhook registration
+(``setup_webhook``/``remove_webhook``); aiogram is imported lazily inside ``get_bot`` so
+importing this module never pulls in the transport. *Inbound* Telegram updates are a
+separate concern and live in ``services/telegram.py`` (they aren't channels).
 """
 
 from functools import lru_cache
@@ -54,11 +55,11 @@ def _chunks(text: str, limit: int = _TELEGRAM_LIMIT) -> list[str]:
 
 
 class TelegramChannel:
-    """A :class:`src.agent.channels.Channel` that delivers to one Telegram chat.
+    """A :class:`Channel` that delivers to one Telegram chat.
 
-    Structural-typed (no explicit base) so the agent layer never imports services. Sends
-    free-form text verbatim (plain text — no Markdown parsing to choke on arbitrary
-    content), chunked under Telegram's per-message limit.
+    Structural-typed against the ``Channel`` protocol. Sends free-form text verbatim
+    (plain text — no Markdown parsing to choke on arbitrary content), chunked under
+    Telegram's per-message limit.
     """
 
     def __init__(self, chat_id: str) -> None:

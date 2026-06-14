@@ -6,7 +6,7 @@ import asyncio
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.agent import runtime
-from src.agent.channels import Channel, CollectingChannel
+from src.agent.channels import Channel, CollectingChannel, TelegramChannel
 from src.core.auth import get_current_user
 from src.core.config import settings
 from src.core.database import get_postgres_session
@@ -24,15 +24,19 @@ from src.schemas.agent import (
     TelegramLinkResponse,
 )
 from src.services import feed
-from src.services.channels import TelegramChannel
 from src.services.messaging import process_incoming
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
 
 def _telegram_channel(conn: ConnectionModel) -> Channel | None:
-    """The user's Telegram channel if linked and the bot is configured, else None."""
-    if conn.telegram_chat_id and settings.telegram_enabled:
+    """The user's Telegram channel if this chat is linked, else None.
+
+    Telegram is required for the app to boot (see ``main.lifespan``), so ``telegram_enabled``
+    is invariably true at runtime — the only question is whether *this* chat is linked. This
+    matches how ``scheduler.poll_all_users`` builds the channel.
+    """
+    if conn.telegram_chat_id:
         return TelegramChannel(conn.telegram_chat_id)
     return None
 
@@ -102,12 +106,14 @@ async def poll_now(
 async def post_message(
     body: MessageRequest,
     current_user: UserModel = Depends(get_current_user),
+    session: AsyncSession = Depends(get_postgres_session),
 ) -> MessageResponse:
     """Send a message to the agent over HTTP and get its reply.
 
-    Same core as Telegram: routes through ``process_incoming``. The agent talks via
-    ``send_message``; here those messages are buffered in a CollectingChannel and returned.
+    Same core as Telegram: routes through ``process_incoming``. The authenticated user and
+    request session are passed straight through (no re-resolution); the agent talks via
+    ``send_message``, and here those messages are buffered in a CollectingChannel and returned.
     """
     channel = CollectingChannel()
-    await process_incoming(channel, current_user.id, body.message)
+    await process_incoming(channel, session, current_user, body.message)
     return MessageResponse(messages=channel.messages)

@@ -18,7 +18,7 @@ def configure_logging() -> None:
             structlog.processors.add_log_level,
             structlog.processors.StackInfoRenderer(),
             structlog.processors.TimeStamper(fmt="iso"),
-            structlog.dev.ConsoleRenderer() if settings.is_debug else structlog.processors.JSONRenderer(),
+            structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(log_level),
         context_class=dict,
@@ -33,7 +33,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger = structlog.get_logger()
     logger.info("startup", app_name=settings.app_name)
 
-    from src.services import channels, scheduler
+    from src.agent.channels import remove_webhook, setup_webhook
+    from src.services import scheduler
 
     # Telegram is the only channel — the app is useless without it, so require it FIRST,
     # before starting anything we'd then have to tear down on a failed boot.
@@ -48,11 +49,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     else:
         logger.info("discovery_disabled", agent_enabled=settings.agent_enabled)
 
-    await channels.setup_webhook()
+    await setup_webhook()
 
     yield
 
-    await channels.remove_webhook()
+    await remove_webhook()
     scheduler.stop_scheduler()
     logger.info("shutdown", app_name=settings.app_name)
 
@@ -60,7 +61,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     application = FastAPI(
         title=settings.app_name,
-        debug=settings.is_debug,
+        debug=False,
         lifespan=lifespan,
     )
 

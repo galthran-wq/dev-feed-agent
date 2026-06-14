@@ -111,10 +111,6 @@ class Settings(BaseSettings):
         return f"{self.app_base_url.rstrip('/')}/api/auth/github/callback"
 
     @property
-    def is_debug(self) -> bool:
-        return self.log_level.lower() in ("debug", "info")
-
-    @property
     def postgres_url(self) -> str:
         return f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
 

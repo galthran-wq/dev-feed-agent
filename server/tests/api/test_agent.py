@@ -43,7 +43,7 @@ async def test_post_message_returns_collected_agent_messages(
     # whatever the agent "sent". Stub the core to assert the HTTP collecting contract.
     from src.api.endpoints import agent as agent_ep
 
-    async def fake_process(channel: object, user_id: object, text: str) -> None:
+    async def fake_process(channel: object, session: object, user: object, text: str) -> None:
         await channel.send(f"echo: {text}")  # type: ignore[union-attr]
         await channel.send("and more")  # type: ignore[union-attr]
 
