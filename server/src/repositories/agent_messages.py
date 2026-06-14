@@ -15,19 +15,15 @@ class AgentMessageRepository:
         self.session = session
 
     async def load(self, user_id: UUID, max_tokens: int = 12000, max_runs: int = 100) -> list[ModelMessage]:
-        """Replayable history: the most recent runs, chronological, bounded by a TOKEN budget.
-
-        Whole runs are kept (never split) so tool-call/tool-result pairs stay intact.
-        Feed runs carry large tool payloads, so the token budget is what actually keeps
-        the replayed context bounded. A corrupt row is skipped, not fatal.
-        """
+        """Recent runs, chronological, token-bounded. Whole runs kept so tool-call/result pairs stay intact;
+        the token budget (not run count) is what bounds context since feed runs carry large payloads."""
         result = await self.session.execute(
             select(AgentMessageModel.data)
             .where(AgentMessageModel.user_id == user_id)
             .order_by(AgentMessageModel.created_at.desc())
             .limit(max_runs)
         )
-        # Newest-first: keep runs until the token budget is hit (always keep at least one).
+        # Always keep at least one run even if it alone exceeds the budget.
         selected: list[str] = []
         total = 0
         for data in result.scalars().all():
@@ -37,7 +33,7 @@ class AgentMessageRepository:
             selected.append(data)
 
         messages: list[ModelMessage] = []
-        for data in reversed(selected):  # back to chronological order
+        for data in reversed(selected):
             try:
                 messages.extend(ModelMessagesTypeAdapter.validate_json(data))
             except ValueError as exc:
@@ -45,17 +41,16 @@ class AgentMessageRepository:
         return messages
 
     async def append(self, user_id: UUID, data: bytes) -> None:
-        """Persist one run's new messages (``result.new_messages_json()``)."""
         self.session.add(AgentMessageModel(user_id=user_id, data=data.decode("utf-8")))
         await self.session.commit()
 
     async def clear(self, user_id: UUID) -> None:
-        """Drop all stored conversation history for the user (/reset)."""
+        """Drop all history (/reset)."""
         await self.session.execute(delete(AgentMessageModel).where(AgentMessageModel.user_id == user_id))
         await self.session.commit()
 
     async def replace_with_summary(self, user_id: UUID, summary: str) -> None:
-        """Collapse history to a single system note carrying ``summary`` (/compact)."""
+        """Collapse history to a single system note (/compact)."""
         msg = ModelRequest(parts=[SystemPromptPart(content=f"Summary of earlier conversation:\n{summary}")])
         data = ModelMessagesTypeAdapter.dump_json([msg]).decode("utf-8")
         await self.session.execute(delete(AgentMessageModel).where(AgentMessageModel.user_id == user_id))

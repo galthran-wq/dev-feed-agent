@@ -1,12 +1,6 @@
-"""Telegram webhook — the bot's single inbound channel (no polling).
-
-This module is pure transport: Telegram POSTs each update here, we verify the shared
-secret, dedup the ``update_id`` (delivery is at-least-once), then **fast-ack** with 200 and
-hand the message to ``services.telegram.handle_update`` detached (``asyncio.create_task``)
-— agent runs take seconds and Telegram would otherwise retry and double-fire. The inbound
-orchestration (linking, user resolution, dispatch) lives in ``services/telegram.py``;
-delivery and webhook registration are a channel, in ``agent/channels/telegram.py``.
-"""
+"""Telegram webhook — pure transport: verify secret, dedup update_id, fast-ack, run
+handle_update detached. Fast-ack because agent runs take seconds and Telegram retries
+(and double-fires) on a slow ack. Inbound logic: services/telegram.py."""
 
 import asyncio
 
@@ -29,8 +23,6 @@ async def telegram_webhook(
     request: Request,
     session: AsyncSession = Depends(get_postgres_session),
 ) -> Response:
-    # The shared secret is the gate (it's required for the app to start, so it's always
-    # set in a running instance). A missing/wrong header never reaches processing.
     secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
     if not settings.telegram_webhook_secret or secret != settings.telegram_webhook_secret:
         raise AppError(status_code=403, detail="Invalid webhook secret")
@@ -39,10 +31,9 @@ async def telegram_webhook(
     update_id = data.get("update_id")
     message = data.get("message")
     if not isinstance(update_id, int) or not isinstance(message, dict):
-        # Non-message / malformed update (we only subscribe to "message") — ack & drop.
-        return Response(status_code=200)
+        return Response(status_code=200)  # non-message/malformed — ack & drop
 
-    # At-least-once delivery → dedup before doing any work with side effects.
+    # At-least-once delivery → dedup before any side-effecting work.
     if await ProcessedUpdateRepository(session).seen_or_mark(update_id):
         return Response(status_code=200)
 
@@ -52,6 +43,5 @@ async def telegram_webhook(
     if chat_id is None or not text or not text.strip():
         return Response(status_code=200)
 
-    # Fast-ack: process detached so we return 200 well within Telegram's timeout.
     asyncio.create_task(handle_update(str(chat_id), text))  # noqa: RUF006
     return Response(status_code=200)

@@ -1,14 +1,6 @@
-"""Orchestration entry points: build a profile, chat, and curate a feed.
-
-Chat and the scheduled feed run through the *same* memory-aware agent and share one
-persisted message history, so conversation and feed inform each other. The agent must
-be configured (OPENROUTER_API_KEY) — otherwise these raise AppError(503).
-
-Output model: agents deliver user-facing text via the ``send_message`` tool (writing to
-``deps.channel``), not by returning a string. ``chat``/``curate_feed``/``build_profile``
-take a ``channel`` and the agent talks through it; the return values are for the caller's
-bookkeeping/logging, not for delivery.
-"""
+"""Orchestration entry points: build_profile, chat, curate_feed. Chat and the scheduled
+feed share one agent and one persisted history. Agents deliver via the send_message tool
+(deps.channel), not via return values; returns are for the caller's bookkeeping."""
 
 from uuid import UUID
 
@@ -44,11 +36,7 @@ def _deps(session: AsyncSession, user: UserModel, channel: Channel | None = None
 
 
 async def build_profile(session: AsyncSession, user: UserModel, channel: Channel | None = None) -> str:
-    """Run the explore-style sub-agent to (re)build the user's interest profile.
-
-    The profile agent fills the sections, then (if a channel is given) tells the user via
-    send_message that the profile is ready. Returns the agent's final text for logging.
-    """
+    """(Re)build the interest profile via the explore sub-agent; it messages the user when done."""
     _require_agent()
     agent = agents.make_profile_agent()
     prompt = (
@@ -75,11 +63,7 @@ async def build_profile_safe(user_id: UUID, channel: Channel | None = None) -> N
 
 
 async def chat(session: AsyncSession, user: UserModel, message: str, channel: Channel | None = None) -> None:
-    """Handle one chat turn against the shared, persisted message history.
-
-    The agent replies to the user via the send_message tool (``channel``); this returns
-    nothing. A turn that ends without sending anything is logged as suspicious.
-    """
+    """Handle one chat turn against the shared, persisted message history."""
     _require_agent()
     msg_repo = AgentMessageRepository(session)
     history = await msg_repo.load(user.id, max_tokens=settings.agent_history_token_budget)
@@ -118,13 +102,7 @@ async def reset(session: AsyncSession, user: UserModel) -> None:
 
 
 async def curate_feed(session: AsyncSession, user: UserModel, channel: Channel | None = None) -> tuple[int, int]:
-    """Assemble the feed as a synthetic turn through the shared agent.
-
-    The agent gathers candidates, records them via record_feed_items (the dedup ledger),
-    and — if there's anything fresh worth sending — delivers the digest via send_message
-    (``channel``). Returns ``(new_items, sent)`` — items newly recorded and messages the
-    agent actually sent this run (the caller's "delivered" should reflect ``sent``).
-    """
+    """Assemble the feed as a synthetic agent turn. Returns (new_items recorded, messages sent)."""
     _require_agent()
     profile_md = await ProfileRepository(session).get_markdown(user.id)
 
@@ -151,7 +129,6 @@ async def curate_feed(session: AsyncSession, user: UserModel, channel: Channel |
         result = await agent.run(prompt, message_history=history, deps=deps)
 
     await msg_repo.append(user.id, result.new_messages_json())
-    # `recorded` is the authoritative tally of what the agent surfaced this run.
     new_items = len(deps.recorded)
     if new_items > 0 and deps.sent_count == 0:
         # Recorded items but sent nothing — the digest was dropped; surface it.

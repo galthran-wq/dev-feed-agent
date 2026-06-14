@@ -12,20 +12,15 @@ def _link_code() -> str:
 
 
 class ConnectionModel(Base):
-    """Per-user delivery target + feed scheduling settings.
-
-    GitHub identity lives on ``users`` (it is the sign-in identity); this row
-    holds the Telegram link and how often we deliver a feed.
-    """
+    """Per-user delivery target + feed scheduling. GitHub identity lives on ``users`` (the sign-in identity)."""
 
     __tablename__ = "connections"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True)
 
-    # Telegram chat the bot delivers the feed to. Linked via the bot's /start flow.
     telegram_chat_id: Mapped[str | None] = mapped_column(String, unique=True, default=None)
-    # One-time code embedded in the Telegram deep link to bind a chat to this user.
+    # One-time code in the /start deep link; single-use to guard against chat hijack if the URL leaks.
     telegram_link_code: Mapped[str] = mapped_column(String, unique=True, default=_link_code)
 
     feed_enabled: Mapped[bool] = mapped_column(default=True)

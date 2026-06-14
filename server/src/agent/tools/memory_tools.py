@@ -1,11 +1,5 @@
-"""Tools for the agent's durable memory: the sectioned profile, the shown-items
-ledger, and a way to read what's already been delivered.
-
-The profile is the agent's own notebook about the user — it is expected to patch a
-section the moment it learns something new or changed, not only during /init. The
-feed ledger lets the agent record what it surfaces so the same item isn't shown twice.
-Specific/local facts live in a separate **memories** lane (see ``memory_crud``).
-"""
+"""Durable-memory tools: the sectioned profile + the feed-item ledger (dedup of what's
+been shown). Specific/local facts live in the memories lane (memory_crud)."""
 
 import json
 

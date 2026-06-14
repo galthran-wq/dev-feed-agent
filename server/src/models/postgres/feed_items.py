@@ -7,12 +7,7 @@ from src.core.database import Base
 
 
 class FeedItemModel(Base):
-    """An item the agent has surfaced to a user, across any source.
-
-    Doubles as the dedup ledger (the agent knows what it already showed) and the
-    raw signal for exploration/exploitation. ``external_id`` is source-scoped and
-    free-form (repo full name, arXiv id, HN id, ...).
-    """
+    """An item surfaced to a user. Doubles as the dedup ledger; ``external_id`` is source-scoped and free-form."""
 
     __tablename__ = "feed_items"
     __table_args__ = (UniqueConstraint("user_id", "source", "external_id", name="uq_feed_item_per_user"),)

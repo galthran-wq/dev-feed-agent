@@ -5,8 +5,7 @@ from sqlalchemy import JSON, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from src.core.database import Base
 
-# Canonical, fixed sections of the interest profile. The agent fills/updates them
-# section-by-section; the document is rendered to markdown from this ordered list.
+# Fixed, ordered sections; markdown is rendered from this list.
 PROFILE_SECTIONS: list[str] = [
     "Summary",
     "Languages & stacks",
@@ -18,11 +17,7 @@ PROFILE_SECTIONS: list[str] = [
 
 
 class ProfileModel(Base):
-    """The agent's self-managed memory about a user: a sectioned markdown profile.
-
-    Stored as a ``{section_name: content}`` map so a single section can be patched
-    atomically without rewriting the whole document. Rendered to markdown on read.
-    """
+    """The agent's self-managed user profile. Stored as a section map so one section can be patched in isolation."""
 
     __tablename__ = "profiles"
 

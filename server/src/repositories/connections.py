@@ -34,11 +34,10 @@ class ConnectionRepository:
         return conn
 
     async def link_telegram(self, code: str, chat_id: str) -> ConnectionModel | None:
-        """Bind a Telegram chat to the connection owning ``code``.
+        """Bind a Telegram chat to the connection owning ``code``. Returns None on refusal.
 
-        The code is single-use (rotated on success) and an already-linked connection
-        will not be silently re-pointed to a different chat — both guard against chat
-        hijack if a link URL leaks. Returns None on any of these refusals.
+        Single-use code + refusing to re-point an already-linked connection both guard against chat hijack
+        if a link URL leaks.
         """
         conn = await self.get_by_link_code(code)
         if conn is None:
@@ -61,7 +60,7 @@ class ConnectionRepository:
         await self.session.commit()
 
     async def list_feedable(self) -> list[ConnectionModel]:
-        """Connections eligible for the scheduled feed: enabled, with a linked Telegram chat."""
+        """Connections eligible for the scheduled feed."""
         result = await self.session.execute(
             select(ConnectionModel).where(
                 ConnectionModel.feed_enabled.is_(True),

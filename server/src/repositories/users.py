@@ -131,10 +131,7 @@ class UserRepository(UserRepositoryInterface):
     async def upsert_github_user(
         self, github_id: str, username: str, access_token: str, avatar_url: str | None
     ) -> tuple[UserModel, bool]:
-        """Find-or-create a user by GitHub identity, refreshing the stored token.
-
-        Returns ``(user, created)`` so callers can trigger first-connect side effects.
-        """
+        """Find-or-create by GitHub identity. Returns ``(user, created)`` so callers can fire first-connect work."""
         user = await self.get_by_github_id(github_id)
         created = user is None
         if user is None:

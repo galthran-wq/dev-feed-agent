@@ -1,7 +1,5 @@
-"""Auth-scoped agent endpoints. The web app only needs status + the Telegram link;
-all real interaction — chat, on-demand feed ("gather news again"), and profile rebuild —
-happens in Telegram by talking to the agent. ``/message`` is a debug entry that mirrors the
-Telegram path over HTTP."""
+"""Auth-scoped agent endpoints: status + telegram-link (all the web app needs), plus a
+/message debug entry. Real interaction happens in Telegram by talking to the agent."""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,12 +57,7 @@ async def post_message(
     current_user: UserModel = Depends(get_current_user),
     session: AsyncSession = Depends(get_postgres_session),
 ) -> MessageResponse:
-    """Send a message to the agent over HTTP and get its reply.
-
-    Same core as Telegram: routes through ``process_incoming``. The authenticated user and
-    request session are passed straight through (no re-resolution); the agent talks via
-    ``send_message``, and here those messages are buffered in a CollectingChannel and returned.
-    """
+    """Debug mirror of the Telegram path: through process_incoming, agent output buffered and returned."""
     channel = CollectingChannel()
     await process_incoming(channel, session, current_user, body.message)
     return MessageResponse(messages=channel.messages)

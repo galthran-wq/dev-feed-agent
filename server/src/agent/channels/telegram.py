@@ -1,12 +1,5 @@
-"""Telegram output channel: the shared Bot client, message chunking, and the
-``TelegramChannel`` adapter that implements :class:`Channel` over a Telegram chat.
-
-This is one concrete adapter for the :class:`Channel` port (see ``base.py``). ``get_bot``
-is the one aiogram ``Bot`` instance, reused both for sending and for webhook registration
-(``setup_webhook``/``remove_webhook``); aiogram is imported lazily inside ``get_bot`` so
-importing this module never pulls in the transport. *Inbound* Telegram updates are a
-separate concern and live in ``services/telegram.py`` (they aren't channels).
-"""
+"""Telegram output channel: shared bot, message chunking, the TelegramChannel adapter.
+Inbound updates are a separate concern — see services/telegram.py."""
 
 from functools import lru_cache
 from typing import Any
@@ -21,21 +14,16 @@ _TELEGRAM_LIMIT = 4096
 
 @lru_cache(maxsize=1)
 def get_bot() -> Any:
-    """Lazily build the shared aiogram Bot. Raises if no token is configured."""
     if not settings.telegram_enabled:
         raise RuntimeError("Telegram bot token is not configured")
-    from aiogram import Bot
+    from aiogram import Bot  # lazy: importing this module must not pull in the transport
 
     return Bot(token=settings.telegram_bot_token)
 
 
 def _chunks(text: str, limit: int = _TELEGRAM_LIMIT) -> list[str]:
-    """Split text into <=limit pieces, preferring line boundaries.
-
-    Uses a None sentinel for "empty buffer" so blank lines are preserved (an empty
-    string is falsy but is real content — dropping it would merge paragraphs).
-    """
     out: list[str] = []
+    # None (not "") for "empty buffer" so blank lines survive — dropping them merges paragraphs.
     buf: str | None = None
     for line in text.split("\n"):
         candidate = line if buf is None else f"{buf}\n{line}"
@@ -44,7 +32,6 @@ def _chunks(text: str, limit: int = _TELEGRAM_LIMIT) -> list[str]:
             continue
         if buf is not None:
             out.append(buf)
-        # A single line longer than the limit is hard-split.
         while len(line) > limit:
             out.append(line[:limit])
             line = line[limit:]
@@ -55,13 +42,7 @@ def _chunks(text: str, limit: int = _TELEGRAM_LIMIT) -> list[str]:
 
 
 class TelegramChannel:
-    """A :class:`Channel` that delivers to one Telegram chat.
-
-    Structural-typed against the ``Channel`` protocol. Sends free-form text verbatim
-    (plain text — no Markdown parsing to choke on arbitrary content), chunked under
-    Telegram's per-message limit.
-    """
-
+    # Plain text, never Markdown — arbitrary feed content would choke Telegram's parser.
     def __init__(self, chat_id: str) -> None:
         self.chat_id = chat_id
 
@@ -72,7 +53,6 @@ class TelegramChannel:
 
 
 async def setup_webhook() -> None:
-    """Register the webhook with Telegram (called on startup). Uses the shared Bot."""
     bot = get_bot()
     await bot.set_webhook(
         url=settings.telegram_webhook_url,
@@ -84,7 +64,6 @@ async def setup_webhook() -> None:
 
 
 async def remove_webhook() -> None:
-    """Deregister the webhook and drop the cached Bot (called on shutdown)."""
     try:
         bot = get_bot()
         await bot.delete_webhook(drop_pending_updates=False)

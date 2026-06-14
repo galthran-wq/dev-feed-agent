@@ -1,10 +1,5 @@
-"""The agent's only way to talk to the user.
-
-``send_message`` writes to ``deps.channel`` (a Telegram chat, a buffered HTTP response,
-a test sink). The agent's turn produces no user-visible output otherwise — there is no
-returned-reply path anymore — so a turn that should answer MUST call this. It may be
-called multiple times to send progress updates or several messages.
-"""
+"""The send_message tool — the agent's only way to reach the user (writes to deps.channel).
+The function docstring below is the LLM-facing tool description — keep it."""
 
 import structlog
 from pydantic_ai import RunContext
@@ -23,8 +18,7 @@ async def send_message(ctx: RunContext[AgentDeps], text: str) -> str:
     if not text:
         return "empty text ignored"
     if ctx.deps.channel is None:
-        # No delivery target (e.g. profile build on first OAuth connect, before any chat
-        # is linked). Not an error — the message simply has nowhere to go this run.
+        # No target yet (e.g. profile build on OAuth connect, before a chat is linked) — not an error.
         logger.warning("send_message_no_channel", user_id=str(ctx.deps.user_id))
         return "no channel configured; message not sent"
     await ctx.deps.channel.send(text)

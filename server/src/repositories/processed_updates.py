@@ -8,13 +8,8 @@ class ProcessedUpdateRepository:
         self.session = session
 
     async def seen_or_mark(self, update_id: int) -> bool:
-        """Atomically check-and-mark a Telegram ``update_id``.
-
-        Returns True if it was already processed (caller should drop the update), or False
-        if this call is the first to claim it (caller should process it). The PK + commit
-        makes it race-safe: a concurrent duplicate hits the unique violation and is treated
-        as already-seen.
-        """
+        """Check-and-mark an ``update_id``. True = already seen (drop it); False = first to
+        claim it (process it). Race-safe: a concurrent duplicate hits the PK unique violation → seen."""
         existing = await self.session.get(ProcessedUpdateModel, update_id)
         if existing is not None:
             return True
