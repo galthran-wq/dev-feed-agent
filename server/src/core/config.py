@@ -42,8 +42,13 @@ class Settings(BaseSettings):
     profile_builder_model: str = ""
 
     # --- Telegram bot (delivery + interactive chat) ---
+    # Inbound updates arrive via webhook only: Telegram POSTs to /api/telegram/webhook
+    # (set via setWebhook on startup), which needs a public HTTPS app_base_url and a secret.
     telegram_bot_token: str = ""
     telegram_bot_username: str = ""
+    # Shared secret echoed by Telegram in the X-Telegram-Bot-Api-Secret-Token header;
+    # set at setWebhook time and verified on every inbound webhook. Required for the bot.
+    telegram_webhook_secret: str = ""
 
     # --- MCP feed sources ---
     # HuggingFace is a remote HTTP MCP; the others are gateway containers (supergateway).
@@ -78,6 +83,10 @@ class Settings(BaseSettings):
     @property
     def telegram_enabled(self) -> bool:
         return bool(self.telegram_bot_token)
+
+    @property
+    def telegram_webhook_url(self) -> str:
+        return f"{self.app_base_url.rstrip('/')}/api/telegram/webhook"
 
     @property
     def perplexity_enabled(self) -> bool:

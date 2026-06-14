@@ -1,3 +1,4 @@
+import pytest
 from httpx import AsyncClient
 
 
@@ -33,6 +34,29 @@ async def test_poll_now_without_setup(auth_client: AsyncClient) -> None:
     body = resp.json()
     assert body["delivered"] == 0
     assert body["curated"] == 0
+
+
+async def test_post_message_returns_collected_agent_messages(
+    auth_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The endpoint routes through process_incoming with a CollectingChannel and returns
+    # whatever the agent "sent". Stub the core to assert the HTTP collecting contract.
+    from src.api.endpoints import agent as agent_ep
+
+    async def fake_process(channel: object, user_id: object, text: str) -> None:
+        await channel.send(f"echo: {text}")  # type: ignore[union-attr]
+        await channel.send("and more")  # type: ignore[union-attr]
+
+    monkeypatch.setattr(agent_ep, "process_incoming", fake_process)
+
+    resp = await auth_client.post("/api/agent/message", json={"message": "yo"})
+    assert resp.status_code == 200
+    assert resp.json()["messages"] == ["echo: yo", "and more"]
+
+
+async def test_post_message_requires_auth(client: AsyncClient) -> None:
+    resp = await client.post("/api/agent/message", json={"message": "yo"})
+    assert resp.status_code == 401
 
 
 async def test_agent_endpoints_require_auth(client: AsyncClient) -> None:

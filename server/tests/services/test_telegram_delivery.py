@@ -1,4 +1,4 @@
-from src.services.notifier import _chunks
+from src.services.channels import _chunks
 
 
 def test_chunks_preserves_blank_lines() -> None:

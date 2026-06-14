@@ -25,3 +25,12 @@ class PollNowResponse(BaseModel):
     delivered: int
     curated: int
     message: str
+
+
+class MessageRequest(BaseModel):
+    message: str
+
+
+class MessageResponse(BaseModel):
+    # The agent talks via send_message; over HTTP those messages are collected and returned.
+    messages: list[str]
