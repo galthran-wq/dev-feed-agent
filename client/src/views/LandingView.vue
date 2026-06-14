@@ -1,6 +1,8 @@
 <script setup lang="ts">
 // The single public entry point: explain the product, then "Connect with GitHub".
 // The button hits the backend, which redirects to GitHub's OAuth consent screen.
+import logoUrl from '@/assets/logo.png'
+
 function connect() {
   window.location.href = '/api/auth/github/login'
 }
@@ -9,6 +11,7 @@ function connect() {
 <template>
   <div class="landing">
     <section class="hero">
+      <img class="logo" :src="logoUrl" alt="" width="1077" height="724" />
       <h1>dev-feed-agent</h1>
       <p class="tagline">A personalized, agentic feed for developers &amp; ML engineers.</p>
 
@@ -36,11 +39,18 @@ function connect() {
 .landing {
   display: flex;
   justify-content: center;
-  padding: 5.5rem 1.5rem;
+  padding: 3.5rem 1.5rem 5.5rem;
 }
 .hero {
   max-width: 34rem;
   text-align: center;
+}
+.logo {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+  margin: 0 auto 1.25rem;
 }
 h1 {
   font-size: 2.75rem;
