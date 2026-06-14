@@ -1,7 +1,7 @@
 """memories: a specific/local memory lane distinct from the profile
 
 Revision ID: e5b2c3d4f6a7
-Revises: b2c3d4e5f6a7
+Revises: f1a2b3c4d5e6
 
 """
 from typing import Sequence, Union
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 
 revision: str = 'e5b2c3d4f6a7'
-down_revision: Union[str, None] = 'b2c3d4e5f6a7'
+down_revision: Union[str, None] = 'f1a2b3c4d5e6'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
