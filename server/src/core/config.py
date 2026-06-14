@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     telegram_bot_username: str = ""
     # Echoed back by Telegram in X-Telegram-Bot-Api-Secret-Token; verified on every webhook.
     telegram_webhook_secret: str = ""
+    # Route the bot's HTTP through a proxy — for hosts where api.telegram.org is egress-blocked
+    # but the rest of the internet is fine. Empty => direct.
+    telegram_proxy: str = ""
 
     # --- MCP feed sources ---
     hf_mcp_url: str = "https://huggingface.co/mcp"

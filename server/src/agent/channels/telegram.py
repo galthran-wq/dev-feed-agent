@@ -18,6 +18,10 @@ def get_bot() -> Any:
         raise RuntimeError("Telegram bot token is not configured")
     from aiogram import Bot  # lazy: importing this module must not pull in the transport
 
+    if settings.telegram_proxy:
+        from aiogram.client.session.aiohttp import AiohttpSession
+
+        return Bot(token=settings.telegram_bot_token, session=AiohttpSession(proxy=settings.telegram_proxy))
     return Bot(token=settings.telegram_bot_token)
 
 
