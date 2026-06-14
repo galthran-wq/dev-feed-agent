@@ -116,3 +116,39 @@ async def test_probe_one_swallows_errors() -> None:
             return None
 
     assert await mcp._probe_one(_Boom(), timeout=0.1) is False  # type: ignore[arg-type]
+
+
+def _urls(servers: list[Any]) -> list[str]:
+    return [str(s.url) for s in servers]
+
+
+def _disable_other_sources(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Blank every other MCP source so build_mcp_servers reflects only Perplexity."""
+    for attr in ("hf_mcp_url", "hf_token", "mcp_hn_url", "mcp_arxiv_url", "mcp_reddit_url"):
+        monkeypatch.setattr(mcp.settings, attr, "", raising=False)
+
+
+def test_perplexity_included_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Issue #9: a configured Perplexity gateway URL wires the source in (opt-in on)."""
+    _disable_other_sources(monkeypatch)
+    monkeypatch.setattr(mcp.settings, "mcp_perplexity_url", "http://mcp-perplexity:8000/mcp")
+    monkeypatch.setattr(mcp.settings, "perplexity_api_key", "pplx-secret")
+
+    servers = mcp.build_mcp_servers()
+
+    assert _urls(servers) == ["http://mcp-perplexity:8000/mcp"]
+    # It's a gateway-container source (key injected into the container), so the agent
+    # connects with no Authorization header — auth never travels from the agent.
+    assert not getattr(servers[0], "headers", None)
+
+
+def test_perplexity_skipped_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Issue #9: with no gateway URL the source is simply skipped (opt-in off)."""
+    _disable_other_sources(monkeypatch)
+    monkeypatch.setattr(mcp.settings, "mcp_perplexity_url", "")
+    # A stray key alone must NOT enable the source — the URL is the gate.
+    monkeypatch.setattr(mcp.settings, "perplexity_api_key", "pplx-secret")
+
+    servers = mcp.build_mcp_servers()
+
+    assert servers == []
