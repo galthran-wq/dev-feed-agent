@@ -10,6 +10,7 @@ from src.core.config import settings
 from src.core.database import AsyncSessionLocal
 from src.repositories.connections import ConnectionRepository
 from src.services import feed
+from src.services.channels import TelegramChannel
 
 logger = structlog.get_logger()
 
@@ -29,8 +30,9 @@ async def poll_all_users() -> None:
                 # Fresh session per user so one rollback can't poison the others.
                 async with AsyncSessionLocal() as session:
                     bound = await ConnectionRepository(session).get_by_user_id(conn.user_id)
-                    if bound is not None:
-                        await feed.run_for_user(session, bound)
+                    if bound is not None and bound.telegram_chat_id:
+                        channel = TelegramChannel(bound.telegram_chat_id)
+                        await feed.run_for_user(session, bound, channel=channel)
             except Exception as exc:
                 logger.error("poll_user_failed", user_id=str(conn.user_id), error=str(exc))
     except Exception as exc:  # the scheduler must survive no matter what

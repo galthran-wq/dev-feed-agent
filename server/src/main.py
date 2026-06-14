@@ -40,14 +40,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     else:
         logger.info("discovery_disabled", agent_enabled=settings.agent_enabled)
 
-    if settings.telegram_enabled:
-        telegram_bot.start_bot()
-    else:
-        logger.info("telegram_disabled")
+    # Telegram is the only channel — the app is useless without it, so require it.
+    if not settings.telegram_bot_token or not settings.telegram_webhook_secret:
+        raise RuntimeError(
+            "Telegram is required: set TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET "
+            "(and a public HTTPS APP_BASE_URL Telegram can reach)."
+        )
+    await telegram_bot.setup_webhook()
 
     yield
 
-    await telegram_bot.stop_bot()
+    await telegram_bot.remove_webhook()
     scheduler.stop_scheduler()
     logger.info("shutdown", app_name=settings.app_name)
 

@@ -90,17 +90,19 @@ Single surface: one `docker-compose.yaml`. The client image copies its build int
 
 - **pydantic-ai** agents over **OpenRouter** (OpenAI-compatible). No embeddings — relevance is judged by the LLM over the profile.
 - `prompts/` — system prompts as markdown files (`profile_builder.md`, `chat.md`).
-- `tools/` — pydantic-ai tool functions: `github_tools` (repos/starred/dependency scan), `feed_tools` (issue/repo search), `memory_tools` (read/patch profile, list already-shown, `record_feed_items`).
-- `mcp.py` — builds MCP toolsets (HuggingFace remote HTTP + the three gateway containers); each source is opt-in by config.
+- `tools/` — pydantic-ai tool functions: `github_tools` (repos/starred/dependency scan), `feed_tools` (issue/repo search), `memory_tools` (read/patch profile, list already-shown, `record_feed_items`), `messaging_tools` (`send_message`).
+- **Output model**: agents talk to the user **only** via the `send_message` tool, which writes to `deps.channel` (`src/agent/channels.py`: `Channel` Protocol + `CollectingChannel`; the Telegram adapter is `src/services/channels.py: TelegramChannel`). Runs don't return a reply string — chat, the scheduled feed, and the profile build all deliver by calling `send_message`.
+- `mcp.py` — builds MCP toolsets (HuggingFace remote HTTP + the gateway containers); each source is opt-in by config.
 - `agents.py` — per-run agent factories (`make_profile_agent`, `make_chat_agent`). One `make_chat_agent` serves **both** Telegram chat and the scheduled feed. A fresh `Agent` per run; MCP connections open inside `async with agent`.
-- `runtime.py` — `build_profile` (explore sub-agent), `chat`, and `curate_feed` (a synthetic "assemble the feed" turn). Chat and feed run through the same agent and share one persisted message history. The feed is **free-form text** (no structured schema); the agent records what it surfaces via `record_feed_items`. `build_profile_safe` runs in the background on first connect / `/init`.
+- `runtime.py` — `build_profile` (explore sub-agent; ends by messaging the user the profile is ready), `chat`, and `curate_feed` (a synthetic "assemble the feed" turn). All take a `channel`; chat and feed share one persisted message history. The feed is **free-form text** the agent delivers via `send_message`; it records what it surfaces via `record_feed_items`. `build_profile_safe` runs in the background on first connect / `/init`.
 - Memory: the **profile** is a sectioned markdown doc the agent self-edits via `update_profile_section`; `agent_messages` stores the structured pydantic-ai message history (tool calls/results included), replayed via `message_history=` and bounded by a **token budget** (`AGENT_HISTORY_TOKEN_BUDGET`, counted with tiktoken; `/compact` summarizes, `/reset` clears); `feed_items` is the dedup ledger of what's been shown.
 
 ### Services (`server/src/services/`)
 
-- `feed.py` — one per-user pass: `curate_feed` → deliver to Telegram → mark fed (error-contained).
-- `scheduler.py` — APScheduler hourly job over all feedable connections, fresh session per user, never raises.
-- `telegram_bot.py` (aiogram) — `/start <code>` links a chat, `/init` rebuilds the profile, `/compact` summarizes history into one note, `/reset` clears history (profile kept), free text → `runtime.chat`. `notifier.py` sends the free-form digest as plain, chunked text. Both opt-in via `TELEGRAM_BOT_TOKEN`.
+- `messaging.py` — `process_incoming(channel, user_id, text)`: the single, channel-agnostic entry point for an inbound message (command dispatch `/init`·`/reset`·`/compact` + free text → chat agent). Both the Telegram webhook and `POST /api/agent/message` funnel through it; opens its own session so it can run detached (the webhook fast-acks via `asyncio.create_task`).
+- `feed.py` — one per-user pass: `curate_feed(channel)` (the agent delivers via `send_message`) → mark fed (error-contained).
+- `scheduler.py` — APScheduler hourly job over all feedable connections; builds a `TelegramChannel` per user; fresh session per user, never raises.
+- `telegram_bot.py` — **webhook-only** (no polling): `POST /api/telegram/webhook` (`src/api/endpoints/telegram.py`) verifies the secret, dedups `update_id` (`processed_updates`), fast-acks 200, and schedules `handle_update` → `process_incoming`. `/start <code>` links the chat. `setup_webhook`/`remove_webhook` register the webhook on startup/shutdown. Telegram is **required** (the app raises at startup without `TELEGRAM_BOT_TOKEN` + `TELEGRAM_WEBHOOK_SECRET`). `notifier.py` sends plain, chunked text.
 
 ### Frontend (`client/`)
 
@@ -124,7 +126,7 @@ Single surface: one `docker-compose.yaml`. The client image copies its build int
 ## Environment Setup
 
 1. Run `make setup` (creates `.env` from `.env.example`)
-2. Fill `.env`: `GITHUB_OAUTH_CLIENT_ID/_SECRET` (callback `${APP_BASE_URL}/api/auth/github/callback`), `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN/_USERNAME`, optionally `HF_TOKEN`
+2. Fill `.env`: `GITHUB_OAUTH_CLIENT_ID/_SECRET` (callback `${APP_BASE_URL}/api/auth/github/callback`), `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN/_USERNAME` + `TELEGRAM_WEBHOOK_SECRET` (Telegram is webhook-only and required; `APP_BASE_URL` must be a public HTTPS URL Telegram can reach), optionally `HF_TOKEN`
 3. `make build && make up`
 4. App at `http://localhost:5746`, API docs at `http://localhost:5746/api/docs`
 
