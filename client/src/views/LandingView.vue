@@ -70,7 +70,8 @@ h1 {
   line-height: 1.65;
   color: #374151;
   margin: 0 auto 2.25rem;
-  max-width: 32rem;
+  max-width: 30rem;
+  text-align: left;
 }
 .connect {
   display: inline-flex;
