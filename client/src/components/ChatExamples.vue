@@ -167,6 +167,9 @@ function nudge(dir: number) {
   flex: 0 0 auto;
   width: min(22rem, 80vw);
   scroll-snap-align: center;
+  /* stretch every card to the tallest (the digest) so all panels match */
+  display: flex;
+  flex-direction: column;
 }
 
 /* Arrows — hidden on touch-ish small screens, shown on wide */
@@ -206,6 +209,9 @@ function nudge(dir: number) {
 
 /* Chat window */
 .window {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   background: #fff;
   border: 1px solid var(--color-border);
   border-radius: 18px;
@@ -253,6 +259,7 @@ function nudge(dir: number) {
   box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.28);
 }
 .thread {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
