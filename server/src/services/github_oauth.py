@@ -5,9 +5,11 @@ we keep for GitHub API calls. CSRF is handled with a short-lived JWT-signed ``st
 (a nonce signed with SECRET_KEY), so no server-side session storage is needed.
 """
 
+import hashlib
+import hmac
 import secrets
 from datetime import UTC, datetime, timedelta
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import httpx
 import structlog
@@ -21,6 +23,13 @@ _AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 _TOKEN_URL = "https://github.com/login/oauth/access_token"
 _USER_URL = "https://api.github.com/user"
 _STATE_TTL_MINUTES = 10
+
+#: Name of the HttpOnly cookie that binds the OAuth ``state`` to the browser.
+STATE_COOKIE_NAME = "gh_oauth_state"
+#: Path-scoped so the cookie is only ever sent to the OAuth endpoints.
+STATE_COOKIE_PATH = "/api/auth/github"
+#: Short-lived: the GitHub round-trip takes seconds, not minutes.
+STATE_COOKIE_MAX_AGE = 600
 
 
 class GithubUser(BaseModel):
@@ -44,6 +53,32 @@ def verify_state(state: str) -> bool:
         return True
     except JWTError:
         return False
+
+
+def state_cookie_value(state: str) -> str:
+    """The browser-bound cookie value: a SHA-256 hash of the state.
+
+    Storing the hash (not the raw state) keeps the full signed token out of the
+    cookie jar while still letting the callback prove the browser is the same one
+    that started the flow.
+    """
+    return hashlib.sha256(state.encode()).hexdigest()
+
+
+def state_matches_cookie(state: str, cookie_value: str | None) -> bool:
+    """Constant-time check that the callback's ``state`` matches the cookie set at login."""
+    if not cookie_value:
+        return False
+    return hmac.compare_digest(state_cookie_value(state), cookie_value)
+
+
+def cookie_secure() -> bool:
+    """Mark the cookie ``Secure`` whenever the app is served over HTTPS.
+
+    Derived from ``APP_BASE_URL`` (the public, nginx-fronted origin); a ``https``
+    scheme means TLS terminates at nginx, so the cookie must be HTTPS-only.
+    """
+    return urlparse(settings.app_base_url).scheme == "https"
 
 
 def build_authorize_url(state: str) -> str:
