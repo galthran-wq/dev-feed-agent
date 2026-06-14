@@ -56,7 +56,6 @@ off; each MCP source is skipped if its URL/token is unset.
 nginx (reverse proxy, the only host-published port, :5677)
 ├── /                      → client (built Vue SPA, served static)
 ├── /api/*                 → server (FastAPI)  ── /api/auth/github/*  (OAuth)
-├── /grafana/ /prometheus/ → monitoring
 └── server ── postgres (async SQLAlchemy; in-network only, no host port)
          ├── agent (pydantic-ai via OpenRouter)
          │     ├── GitHub tools (repos, deps, issue/repo search)
@@ -73,7 +72,6 @@ nginx (reverse proxy, the only host-published port, :5677)
 | **nginx** | Reverse proxy, serves the built SPA; config in `deploy/nginx/nginx.conf` |
 | **mcp-hn / mcp-arxiv / mcp-reddit** | `supergateway` wrapping each stdio MCP server as HTTP (image `deploy/mcp/`) |
 | **mcp-perplexity** | Optional web-grounded source (`@perplexity-ai/mcp-server` via `supergateway`); opt-in, API-key-gated |
-| **prometheus / grafana** | Metrics + dashboards |
 
 ### Backend layout (`server/src/`)
 
