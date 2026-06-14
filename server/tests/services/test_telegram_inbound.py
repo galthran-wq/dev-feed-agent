@@ -3,16 +3,16 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from src.agent.channels import CollectingChannel
 from src.models.postgres.users import UserModel
 from src.repositories.connections import ConnectionRepository
-from src.services import channels
+from src.services import telegram as tg
 
 
 @pytest.fixture
 def _wire(db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> CollectingChannel:
     """Point handle_update's own-session at the test engine and capture what it sends."""
     maker = async_sessionmaker(db_session.bind, class_=AsyncSession, expire_on_commit=False)
-    monkeypatch.setattr(channels, "AsyncSessionLocal", maker)
+    monkeypatch.setattr(tg, "AsyncSessionLocal", maker)
     ch = CollectingChannel()
-    monkeypatch.setattr(channels, "TelegramChannel", lambda chat_id: ch)
+    monkeypatch.setattr(tg, "TelegramChannel", lambda chat_id: ch)
     return ch
 
 
@@ -23,15 +23,15 @@ async def test_handle_update_swallows_errors(_wire: CollectingChannel, monkeypat
     async def boom(channel: object, chat_id: str, code: str) -> None:
         raise RuntimeError("kaboom")
 
-    monkeypatch.setattr(channels, "_handle_start", boom)
+    monkeypatch.setattr(tg, "_handle_start", boom)
 
-    await channels.handle_update("5", "/start somecode")  # must not raise
+    await tg.handle_update("5", "/start somecode")  # must not raise
     assert any("went wrong" in m for m in _wire.messages)
 
 
 async def test_unlinked_chat_is_told_to_link(_wire: CollectingChannel) -> None:
     # No connection for this chat_id → the Telegram layer (not process_incoming) owns this.
-    await channels.handle_update("999", "hello")
+    await tg.handle_update("999", "hello")
     assert any("isn't linked" in m for m in _wire.messages)
 
 
@@ -48,7 +48,7 @@ async def test_linked_chat_reaches_process_incoming(
         seen["user_id"] = user.id
         seen["text"] = text
 
-    monkeypatch.setattr(channels, "process_incoming", fake_process)
+    monkeypatch.setattr(tg, "process_incoming", fake_process)
 
-    await channels.handle_update("5", "any rust news?")
+    await tg.handle_update("5", "any rust news?")
     assert seen == {"user_id": test_user.id, "text": "any rust news?"}

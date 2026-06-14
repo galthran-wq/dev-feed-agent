@@ -1,4 +1,4 @@
-from src.services.channels import _chunks
+from src.agent.channels.telegram import _chunks
 
 
 def test_chunks_preserves_blank_lines() -> None:

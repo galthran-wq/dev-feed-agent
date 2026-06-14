@@ -6,7 +6,7 @@ import asyncio
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.agent import runtime
-from src.agent.channels import Channel, CollectingChannel
+from src.agent.channels import Channel, CollectingChannel, TelegramChannel
 from src.core.auth import get_current_user
 from src.core.config import settings
 from src.core.database import get_postgres_session
@@ -24,7 +24,6 @@ from src.schemas.agent import (
     TelegramLinkResponse,
 )
 from src.services import feed
-from src.services.channels import TelegramChannel
 from src.services.messaging import process_incoming
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])

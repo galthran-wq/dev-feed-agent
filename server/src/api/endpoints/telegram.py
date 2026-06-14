@@ -2,10 +2,10 @@
 
 This module is pure transport: Telegram POSTs each update here, we verify the shared
 secret, dedup the ``update_id`` (delivery is at-least-once), then **fast-ack** with 200 and
-hand the message to ``services.channels.handle_update`` detached (``asyncio.create_task``)
-— agent runs take seconds and Telegram would otherwise retry and double-fire. All the
-Telegram message orchestration (linking, user resolution, dispatch) lives in
-``services/channels.py``; webhook registration lives there too.
+hand the message to ``services.telegram.handle_update`` detached (``asyncio.create_task``)
+— agent runs take seconds and Telegram would otherwise retry and double-fire. The inbound
+orchestration (linking, user resolution, dispatch) lives in ``services/telegram.py``;
+delivery and webhook registration are a channel, in ``agent/channels/telegram.py``.
 """
 
 import asyncio
@@ -17,7 +17,7 @@ from src.core.config import settings
 from src.core.database import get_postgres_session
 from src.core.exceptions import AppError
 from src.repositories.processed_updates import ProcessedUpdateRepository
-from src.services.channels import handle_update
+from src.services.telegram import handle_update
 
 logger = structlog.get_logger()
 
