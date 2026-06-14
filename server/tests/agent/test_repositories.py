@@ -12,6 +12,7 @@ from src.models.postgres.profiles import PROFILE_SECTIONS
 from src.repositories.agent_messages import AgentMessageRepository
 from src.repositories.connections import ConnectionRepository
 from src.repositories.feed_items import FeedItemRepository
+from src.repositories.memories import MemoryRepository
 from src.repositories.profiles import ProfileRepository
 
 
@@ -130,3 +131,69 @@ async def test_telegram_link_is_single_use_and_no_hijack(db_session: AsyncSessio
 
     # Re-linking the same chat with the current code is idempotent and allowed.
     assert await repo.link_telegram(linked.telegram_link_code, "chat-1") is not None
+
+
+async def test_memory_crud_roundtrip(db_session: AsyncSession) -> None:
+    repo = MemoryRepository(db_session)
+    user_id = uuid4()
+
+    assert await repo.list(user_id) == []
+
+    created = await repo.add(user_id, "Declined JS project", "On 2026-06-13 they passed on contributing.")
+    listed = await repo.list(user_id)
+    assert [m.id for m in listed] == [created.id]
+
+    fetched = await repo.get(user_id, created.id)
+    assert fetched is not None
+    assert fetched.title == "Declined JS project"
+    assert "passed on contributing" in fetched.body
+
+    edited = await repo.edit(user_id, created.id, title="Asked about CRDTs", body="Curious about CRDTs once.")
+    assert edited is not None
+    assert edited.title == "Asked about CRDTs"
+    assert edited.body == "Curious about CRDTs once."
+
+    assert await repo.delete(user_id, created.id) is True
+    assert await repo.get(user_id, created.id) is None
+    # Deleting a non-existent memory is a no-op that reports failure.
+    assert await repo.delete(user_id, created.id) is False
+
+
+async def test_memory_search_substring_case_insensitive(db_session: AsyncSession) -> None:
+    repo = MemoryRepository(db_session)
+    user_id = uuid4()
+
+    await repo.add(user_id, "Loves Rust", "Wants more embedded Rust projects.")
+    await repo.add(user_id, "Python note", "Prefers asyncio over threads.")
+
+    # Match by title, case-insensitively.
+    by_title = await repo.search(user_id, "rust")
+    assert [m.title for m in by_title] == ["Loves Rust"]
+
+    # Match by body substring.
+    by_body = await repo.search(user_id, "ASYNCIO")
+    assert [m.title for m in by_body] == ["Python note"]
+
+    # No match -> empty.
+    assert await repo.search(user_id, "golang") == []
+
+
+async def test_memory_scoped_by_user(db_session: AsyncSession) -> None:
+    repo = MemoryRepository(db_session)
+    user_a = uuid4()
+    user_b = uuid4()
+
+    mem_a = await repo.add(user_a, "A's secret", "Only A should see this.")
+
+    # User B sees none of A's memories, by list, get, or search.
+    assert await repo.list(user_b) == []
+    assert await repo.get(user_b, mem_a.id) is None
+    assert await repo.search(user_b, "secret") == []
+
+    # And cannot edit or delete A's memory.
+    assert await repo.edit(user_b, mem_a.id, title="hijacked") is None
+    assert await repo.delete(user_b, mem_a.id) is False
+    # A's memory is intact.
+    still = await repo.get(user_a, mem_a.id)
+    assert still is not None
+    assert still.title == "A's secret"
