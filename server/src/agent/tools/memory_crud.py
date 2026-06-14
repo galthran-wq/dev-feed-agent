@@ -1,10 +1,6 @@
-"""CRUD tools over the agent's **memories** — specific, local facts about the user.
-
-Distinct from the sectioned **profile** (general/persistent/high-level facts, edited
-via ``update_profile_section``). A memory is a narrow note, often time-stamped — "on
-2026-06-13 they declined contributing to that JS project", "asked about CRDTs once".
-The agent creates/reads/edits/deletes these and consults them alongside the profile.
-"""
+"""CRUD tools over the agent's *memories* — specific/local facts, distinct from the
+sectioned profile (general/persistent, edited via update_profile_section).
+(Function docstrings below are the tool descriptions the LLM sees — keep them.)"""
 
 import json
 from uuid import UUID

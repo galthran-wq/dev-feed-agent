@@ -1,11 +1,5 @@
-"""Telegram *inbound* handling: turn a raw webhook update into an agent run.
-
-The outbound side (delivery, the shared bot, webhook registration) is a channel and lives
-in ``agent/channels/telegram.py``. This module is the inbound counterpart: it owns the
-Telegram-specific work — ``/start`` linking and chat_id→user resolution — then hands the
-resolved user to the channel-agnostic ``services.messaging.process_incoming``. The webhook
-endpoint (``api/endpoints/telegram.py``) is pure transport and just schedules ``handle_update``.
-"""
+"""Telegram *inbound*: /start linking + chat_id→user, then hand off to the channel-agnostic
+process_incoming. Outbound delivery is a channel (agent/channels/telegram.py)."""
 
 import structlog
 from src.agent.channels import TelegramChannel
@@ -20,7 +14,6 @@ _NOT_LINKED = "This chat isn't linked yet. Link it from the web app first."
 
 
 async def _handle_start(channel: TelegramChannel, chat_id: str, code: str) -> None:
-    """`/start [<code>]` — link this chat to a user (or greet if no code)."""
     if not code:
         await channel.send(
             "👋 I'm dev-feed-agent. I deliver a personalized feed of repos, issues, "
@@ -40,16 +33,8 @@ async def _handle_start(channel: TelegramChannel, chat_id: str, code: str) -> No
 
 
 async def handle_update(chat_id: str, text: str) -> None:
-    """Process one inbound Telegram text message.
-
-    Owns everything transport-specific — building the channel, ``/start`` linking, and the
-    chat_id→user resolution — then hands the resolved user to the channel-agnostic
-    ``process_incoming``. It opens one session for the whole turn, so identity resolution
-    and the agent run share it.
-
-    Runs detached from the (already-acked) webhook, so it must never let an exception escape
-    unlogged — the update is already marked seen and won't be retried.
-    """
+    # Detached from the already-acked webhook: never let an exception escape unlogged —
+    # the update is marked seen and won't be retried.
     channel = TelegramChannel(chat_id)
     stripped = (text or "").strip()
     try:
@@ -63,8 +48,7 @@ async def handle_update(chat_id: str, text: str) -> None:
                 await channel.send(_NOT_LINKED)
                 return
             user = await UserRepository(session).get_user(conn.user_id)
-            if user is None:
-                # Connection exists but the user is gone — shouldn't happen; treat as an error.
+            if user is None:  # connection exists but user gone — shouldn't happen
                 logger.error("telegram_chat_user_missing", chat_id=chat_id, user_id=str(conn.user_id))
                 await channel.send(GENERIC_ERROR)
                 return

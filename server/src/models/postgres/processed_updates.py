@@ -6,17 +6,9 @@ from src.core.database import Base
 
 
 class ProcessedUpdateModel(Base):
-    """Telegram ``update_id``s we've already handled.
-
-    Telegram delivers webhook updates at-least-once (it re-sends until it gets a 2XX, and
-    can redeliver across restarts). Agent runs have non-idempotent side effects (sent
-    messages, recorded feed items), so we dedup on ``update_id`` before processing.
-
-    Tradeoffs (acceptable for a feed bot): marking-before-processing makes delivery
-    at-most-once if the process dies mid-handle; and this table grows one row per inbound
-    message with no TTL — a periodic prune (e.g. drop rows older than a few days) is a
-    follow-up if it ever matters.
-    """
+    """Dedup ledger of Telegram ``update_id``s. Webhook delivery is at-least-once and agent
+    runs aren't idempotent (sent messages, recorded items), so we dedup before processing.
+    Tradeoffs: mark-before-process → at-most-once on a mid-handle crash; grows without TTL (prune later)."""
 
     __tablename__ = "processed_updates"
 

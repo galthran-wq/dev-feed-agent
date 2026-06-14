@@ -1,8 +1,5 @@
-"""Per-user feed pass: curate (agent) → the agent delivers via its channel → mark fed.
-
-The agent records items for dedup and sends the digest itself through ``send_message``
-(the ``channel``). Passing ``channel=None`` curates without delivering (dry run / tests).
-"""
+"""Per-user feed pass: curate via the agent (it delivers through its channel) → mark fed.
+``channel=None`` curates without delivering (dry run / tests)."""
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,6 +34,5 @@ async def run_for_user(session: AsyncSession, conn: ConnectionModel, *, channel:
     if new_items == 0:
         return FeedResult(0, 0, "no new matches")
 
-    # The agent delivers via the channel itself; "delivered" reflects what it actually sent.
     log.info("feed_pass_done", curated=new_items, delivered=sent)
     return FeedResult(sent, new_items)
