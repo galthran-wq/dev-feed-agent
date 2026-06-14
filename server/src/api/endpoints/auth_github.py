@@ -7,6 +7,7 @@ import structlog
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from src.agent.channels import Channel, TelegramChannel
 from src.core.auth import create_token_for_user
 from src.core.config import settings
 from src.core.database import get_postgres_session
@@ -20,6 +21,15 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/api/auth/github", tags=["auth"])
 
 
+async def _notify_linked(channel: Channel) -> None:
+    """Contained background notice — a failed Telegram send must not surface as an
+    orphaned-task exception (login already succeeded)."""
+    try:
+        await channel.send("✅ Linked to GitHub! I’ll send your feed here — chat anytime to steer it.")
+    except Exception as exc:
+        logger.warning("github_oauth_tg_notice_failed", error=str(exc))
+
+
 def _clear_state_cookie(response: RedirectResponse) -> None:
     """Single-use: drop the state cookie regardless of outcome."""
     response.delete_cookie(
@@ -29,10 +39,13 @@ def _clear_state_cookie(response: RedirectResponse) -> None:
 
 
 @router.get("/login")
-async def github_login() -> RedirectResponse:
+async def github_login(tg: str | None = None) -> RedirectResponse:
     if not settings.github_oauth_enabled:
         raise AppError(status_code=503, detail="GitHub OAuth is not configured")
-    state = github_oauth.issue_state()
+    # When launched from the Telegram "Login with GitHub" button, `tg` is a signed token
+    # carrying the chat id; thread it into the (signed) state so the callback can auto-link.
+    tg_chat = github_oauth.read_tg_link_token(tg) if tg else None
+    state = github_oauth.issue_state(tg_chat=tg_chat)
     response = RedirectResponse(github_oauth.build_authorize_url(state))
     # Bind the state to this browser: only a callback carrying the matching cookie
     # is honoured, which closes login-CSRF. HttpOnly keeps it out of JS; SameSite=Lax
@@ -81,11 +94,23 @@ async def github_callback(
     # Every user needs a connection row (holds the Telegram link code).
     await ConnectionRepository(session).get_or_create(user.id)
 
+    # Telegram-initiated login: auto-link this chat to the user (no /start code needed),
+    # and route the profile build's "ready" message back to that chat.
+    channel: Channel | None = None
+    tg_chat = github_oauth.state_tg_chat(state)
+    if tg_chat:
+        linked = await ConnectionRepository(session).link_chat_to_user(user.id, tg_chat)
+        if linked:
+            channel = TelegramChannel(tg_chat)
+            asyncio.create_task(_notify_linked(channel))  # noqa: RUF006
+        else:
+            logger.warning("github_oauth_tg_link_refused", user_id=str(user.id))
+
     if created and settings.agent_enabled:
         # Fire-and-forget the initial profile build; the user lands on a "building" state.
         from src.agent import runtime
 
-        asyncio.create_task(runtime.build_profile_safe(user.id))  # noqa: RUF006
+        asyncio.create_task(runtime.build_profile_safe(user.id, channel))  # noqa: RUF006
 
     jwt_token = create_token_for_user(user)
     # Deliver the JWT in the URL fragment, not the query string: fragments are never
