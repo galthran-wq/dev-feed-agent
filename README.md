@@ -13,7 +13,7 @@ It's a **lightweight agent**, not a recommendation engine or another keyword dig
   (plus optional Perplexity), each a live MCP toolset the agent queries directly, not a scraped cache.
 - **A personal profile it builds and maintains** — a living markdown `profile.md`, inferred from your
   GitHub activity (your repos and their dependencies) and self-edited as it learns more. Relevance is
-  the LLM *reasoning over this profile* — **no embeddings, no opaque similarity scores**.
+  the LLM *reasoning over this profile*.
 - **Memory** — it remembers your conversations and everything it has already shown you, so the feed
   never repeats and the way you steer it sticks.
 - **A scheduled feed** — an hourly pass curates fresh, de-duplicated items and delivers them to
