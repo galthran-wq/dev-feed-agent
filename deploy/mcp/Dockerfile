@@ -9,8 +9,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates python3 \
     && rm -rf /var/lib/apt/lists/*
 
-# uv provides `uvx`, used to run the Python arXiv MCP server.
-COPY --from=ghcr.io/astral-sh/uv:0.7 /uv /usr/local/bin/uv
+# uv + uvx (separate binaries) — uvx runs the Python arXiv MCP server.
+COPY --from=ghcr.io/astral-sh/uv:0.7 /uv /uvx /usr/local/bin/
 
 # Each compose service overrides `command` with its own supergateway invocation.
 EXPOSE 8000
