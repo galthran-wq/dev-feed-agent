@@ -87,11 +87,13 @@ async def curate_feed(session: AsyncSession, user: UserModel, channel: Channel |
         "Spawn several feed_gather sub-agents in parallel (one step), each with a focused task "
         "across your sources (GitHub issues/repos, HuggingFace, Hacker News, arXiv, Reddit) — "
         "split a source into multiple angles when their interests are broad. Consolidate the "
-        "candidates they return, drop anything already shown, and pick a balanced set of about "
+        "candidates they return, drop anything already shown, lean recent (prefer the last week, "
+        "keep older gems), and pick a balanced set of about "
         f"{exploit_n} 'exploit' items (squarely their interests) and {explore_n} 'explore' items "
         "(adjacent new horizons). Record your final picks with record_feed_items, then send the "
-        "user a concise, friendly plain-text digest of those items with links via send_message. "
-        "If nothing new is worth sending, record nothing and send NOTHING (do not message the user)."
+        "compact, theme-grouped digest (one line per item, per the digest structure) via "
+        "send_message. If nothing new is worth sending, record nothing and send NOTHING "
+        "(do not message the user)."
     )
 
     msg_repo = AgentMessageRepository(session)
