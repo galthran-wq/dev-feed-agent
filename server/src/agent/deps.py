@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass, field
 from uuid import UUID
 
@@ -18,3 +19,7 @@ class AgentDeps:
     recorded: list[dict[str, str]] = field(default_factory=list)
     channel: Channel | None = None
     sent_count: int = 0
+    # One shared AsyncSession across the run, but models (e.g. deepseek) emit parallel tool
+    # calls that pydantic-ai runs concurrently — and AsyncSession isn't concurrency-safe.
+    # DB-touching tools take this lock so their session access is serialized.
+    db_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
