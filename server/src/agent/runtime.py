@@ -5,7 +5,10 @@ feed share one agent and one persisted history. Agents deliver via the send_mess
 Profile building is no longer a top-level entry point — it's the ``profile_build`` sub-agent
 kind (src/agent/subagents.py) that the chat agent spawns when it sees an empty profile."""
 
+from dataclasses import replace
+
 import structlog
+from pydantic_ai.messages import ModelMessage, ModelRequest, SystemPromptPart
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.agent import agents
 from src.agent.channels import Channel
@@ -22,6 +25,22 @@ logger = structlog.get_logger()
 def _require_agent() -> None:
     if not settings.agent_enabled:
         raise AppError(status_code=503, detail="LLM agent is not configured (set OPENROUTER_API_KEY)")
+
+
+def _prime_history(history: list[ModelMessage], system_text: str) -> list[ModelMessage]:
+    """Lead the run with the CURRENT system prompt. pydantic-ai bakes the system prompt into the
+    first persisted run and won't refresh it when message_history is passed — so without this,
+    prompt changes (formatting, date, structure) never reach a user who already has history.
+    Strip any stored system parts and prepend the fresh prompt."""
+    cleaned: list[ModelMessage] = []
+    for m in history:
+        if isinstance(m, ModelRequest):
+            kept = [p for p in m.parts if not isinstance(p, SystemPromptPart)]
+            if kept:
+                cleaned.append(replace(m, parts=kept))
+        else:
+            cleaned.append(m)
+    return [ModelRequest(parts=[SystemPromptPart(content=system_text)]), *cleaned]
 
 
 def _deps(session: AsyncSession, user: UserModel, channel: Channel | None = None) -> AgentDeps:
@@ -42,8 +61,9 @@ async def chat(session: AsyncSession, user: UserModel, message: str, channel: Ch
 
     agent = await agents.make_chat_agent()
     deps = _deps(session, user, channel)
+    primed = _prime_history(history, agents.build_chat_system_prompt(channel))
     async with agent:
-        result = await agent.run(message, message_history=history, deps=deps)
+        result = await agent.run(message, message_history=primed, deps=deps)
 
     await msg_repo.append(user.id, result.new_messages_json())
     if deps.sent_count == 0:
@@ -60,8 +80,11 @@ async def compact(session: AsyncSession, user: UserModel) -> str:
     if not history:
         return "Nothing to compact yet."
     agent = agents.make_summarizer_agent()
+    # Same freeze applies: with history, the agent's system_prompt is ignored — inject the
+    # summarizer prompt so it isn't replaced by a stale chat/summary prompt from history.
+    primed = _prime_history(history, agents.SUMMARIZER_PROMPT)
     async with agent:
-        result = await agent.run("Summarize the conversation so far.", message_history=history)
+        result = await agent.run("Summarize the conversation so far.", message_history=primed)
     await msg_repo.replace_with_summary(user.id, result.output)
     logger.info("history_compacted", user_id=str(user.id))
     return result.output
@@ -78,22 +101,21 @@ async def curate_feed(session: AsyncSession, user: UserModel, channel: Channel |
     _require_agent()
     profile_md = await ProfileRepository(session).get_markdown(user.id)
 
-    explore_n = round(settings.feed_size * settings.explore_ratio)
-    exploit_n = max(settings.feed_size - explore_n, 0)
     prompt = (
         "It's time to assemble this user's scheduled feed. Follow the \"assemble the feed\" turn: "
         "fan out to feed_gather sub-agents, then reduce.\n\n"
         f"Their interest profile:\n{profile_md}\n\n"
         "Spawn several feed_gather sub-agents in parallel (one step), each with a focused task "
         "across your sources (GitHub issues/repos, HuggingFace, Hacker News, arXiv, Reddit) — "
-        "split a source into multiple angles when their interests are broad. Consolidate the "
-        "candidates they return, drop anything already shown, lean recent (prefer the last week, "
-        "keep older gems), and pick a balanced set of about "
-        f"{exploit_n} 'exploit' items (squarely their interests) and {explore_n} 'explore' items "
-        "(adjacent new horizons). Record your final picks with record_feed_items, then send the "
-        "compact, theme-grouped digest (one line per item, per the digest structure) via "
-        "send_message. If nothing new is worth sending, record nothing and send NOTHING "
-        "(do not message the user)."
+        "split a source into multiple angles when their interests are broad, and ALWAYS include a "
+        "task for GitHub good-first-issues / help-wanted matching their stack. Consolidate the "
+        "candidates they return, drop anything already shown, and lean recent (prefer the last "
+        "week, keep older gems). There is no fixed item count — surface EVERY fresh, relevant item "
+        "that clears the bar (one compact line each keeps it scannable), with a healthy mix of "
+        "'exploit' (squarely their interests) and 'explore' (adjacent horizons). Record your final "
+        "picks with record_feed_items, then send the compact, theme-grouped digest (one line per "
+        "item, per the digest structure) via send_message. If nothing new is worth sending, record "
+        "nothing and send NOTHING (do not message the user)."
     )
 
     msg_repo = AgentMessageRepository(session)
@@ -101,8 +123,9 @@ async def curate_feed(session: AsyncSession, user: UserModel, channel: Channel |
 
     agent = await agents.make_chat_agent()
     deps = _deps(session, user, channel)
+    primed = _prime_history(history, agents.build_chat_system_prompt(channel))
     async with agent:
-        result = await agent.run(prompt, message_history=history, deps=deps)
+        result = await agent.run(prompt, message_history=primed, deps=deps)
 
     await msg_repo.append(user.id, result.new_messages_json())
     new_items = len(deps.recorded)

@@ -169,6 +169,63 @@ def test_today_note_grounds_the_real_date() -> None:
     assert "Never guess, invent, or advance" in note
 
 
+def test_build_chat_system_prompt_includes_date_and_channel_format() -> None:
+    from datetime import UTC, datetime
+
+    from src.agent.agents import build_chat_system_prompt
+    from src.agent.channels.base import CollectingChannel
+
+    prompt = build_chat_system_prompt(CollectingChannel())
+    assert datetime.now(UTC).strftime("%Y-%m-%d") in prompt  # date grounding
+    assert "## Formatting for this channel" in prompt  # channel instructions section wired in
+    assert "plain text" in prompt.lower()  # CollectingChannel's instructions
+    # None channel (no delivery target) is fine — no formatting section.
+    assert "## Formatting for this channel" not in build_chat_system_prompt(None)
+
+
+def test_prime_history_refreshes_system_prompt() -> None:
+    from pydantic_ai.messages import ModelRequest, ModelResponse, SystemPromptPart, TextPart, UserPromptPart
+    from src.agent.runtime import _prime_history
+
+    # A persisted history whose first run froze an OLD system prompt.
+    history = [
+        ModelRequest(parts=[SystemPromptPart(content="OLD frozen prompt"), UserPromptPart(content="hi")]),
+        ModelResponse(parts=[TextPart(content="reply")]),
+    ]
+    primed = _prime_history(history, "CURRENT prompt")
+
+    # Leads with the current prompt; the stale one is gone; the user turn survives.
+    sys_parts = [p.content for m in primed for p in getattr(m, "parts", []) if isinstance(p, SystemPromptPart)]
+    assert sys_parts == ["CURRENT prompt"]
+    user_parts = [p.content for m in primed for p in getattr(m, "parts", []) if isinstance(p, UserPromptPart)]
+    assert user_parts == ["hi"]
+
+
+async def test_primed_history_delivers_current_prompt_to_model() -> None:
+    # Load-bearing: the model must actually RECEIVE the current system prompt (pydantic-ai merges
+    # the leading system-only request with the next request). Guards against a pydantic-ai bump.
+    from pydantic_ai import Agent
+    from pydantic_ai.messages import ModelRequest, ModelResponse, SystemPromptPart, TextPart, UserPromptPart
+    from pydantic_ai.models.function import FunctionModel
+    from src.agent.runtime import _prime_history
+
+    seen: dict = {}
+
+    def capture(messages: list, info: object) -> ModelResponse:
+        seen["system"] = [
+            p.content for m in messages for p in getattr(m, "parts", []) if isinstance(p, SystemPromptPart)
+        ]
+        return ModelResponse(parts=[TextPart(content="ok")])
+
+    agent = Agent(FunctionModel(capture), deps_type=dict)  # no system_prompt, like make_chat_agent
+    stale = [
+        ModelRequest(parts=[SystemPromptPart(content="STALE"), UserPromptPart(content="old")]),
+        ModelResponse(parts=[TextPart(content="r")]),
+    ]
+    await agent.run("new", message_history=_prime_history(stale, "CURRENT"), deps={})
+    assert seen["system"] == ["CURRENT"]  # stale gone, current delivered
+
+
 def test_main_only_tools_are_excluded_from_subagents() -> None:
     # send_message: only the main agent talks to the user.
     assert send_message in MAIN_TOOLS
