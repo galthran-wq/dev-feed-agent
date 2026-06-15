@@ -39,6 +39,9 @@ async def run_for_user(session: AsyncSession, conn: ConnectionModel, *, channel:
             github_token=user.github_access_token,
             github_username=user.github_username,
         )
+        # The sub-agent committed on its own session; the re-check (and curate_feed's profile
+        # read) must reflect that, not a stale identity-map copy — ProfileRepository reads use
+        # populate_existing for exactly this cross-session case.
         if not await profiles.is_built(conn.user_id):
             return FeedResult(0, 0, "profile build failed")
 

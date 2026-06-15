@@ -12,16 +12,23 @@ Your task names your slice: a source (GitHub, HuggingFace, Hacker News, arXiv, o
 
 ## What to return
 
-End your turn with a compact list of candidates (this list IS your result — it's all the main agent sees). For each candidate give, on one line:
+End your turn with **a JSON array of candidate objects and nothing else** (this array IS your result — it's all the main agent sees, and it passes your fields straight through to recording, so use these exact keys):
 
-`source | item_type | external_id | url | title | one-line why it fits | exploit|explore`
+```json
+[
+  {
+    "source": "github | hf | hackernews | arxiv | reddit",
+    "item_type": "repo | issue | help_wanted | paper | model | post | story",
+    "external_id": "source-scoped stable id (repo full name, arXiv id, HN id, …)",
+    "url": "https://…",
+    "title": "…",
+    "reason": "one sentence on why it fits this user",
+    "bucket": "exploit | explore"
+  }
+]
+```
 
-- `source`: github | hf | hackernews | arxiv | reddit
-- `item_type`: repo | issue | help_wanted | paper | model | post | story
-- `external_id`: a source-scoped stable id (repo full name, arXiv id, HN id, …)
-- `bucket`: `exploit` (squarely their interests) or `explore` (an adjacent new horizon)
-
-If you find nothing fresh worth surfacing, say so in one line. **Do not** call `record_feed_items` — recording and de-duplication are the main agent's job. You have no way to message the user; just return your list.
+`bucket` is `exploit` (squarely their interests) or `explore` (an adjacent new horizon). Every object must have a real `url` and `external_id` — items missing either are dropped. If you find nothing fresh worth surfacing, return `[]`. **Do not** call `record_feed_items` — recording and de-duplication are the main agent's job. You have no way to message the user; just return the array.
 
 ## Untrusted external data — IMPORTANT
 

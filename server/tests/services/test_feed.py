@@ -1,6 +1,10 @@
+from datetime import UTC, datetime
+
 import pytest
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.agent import runtime
+from src.models.postgres.profiles import ProfileModel
 from src.models.postgres.users import UserModel
 from src.repositories.connections import ConnectionRepository
 from src.repositories.profiles import ProfileRepository
@@ -73,3 +77,36 @@ async def test_built_profile_skips_build(
 
     await feed.run_for_user(db_session, feedable_conn)  # type: ignore[arg-type]
     assert "built" not in calls  # already built → no rebuild
+
+
+async def test_build_on_other_session_is_seen_after_expire(
+    feedable_conn: object, db_session: AsyncSession, test_user: UserModel, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A row exists but isn't built (e.g. a prior partial build). run_for_user's first is_built()
+    # loads it into the identity map as built_at=None.
+    await ProfileRepository(db_session).set_section(test_user.id, "Summary", "partial")
+    calls: dict = {}
+
+    async def fake_build(*a: object, **k: object) -> tuple[str, str]:
+        # Simulate the sub-agent committing built_at on ITS OWN session: a Core UPDATE with
+        # synchronize_session=False leaves our cached instance stale, exactly like another session.
+        await db_session.execute(
+            update(ProfileModel)
+            .where(ProfileModel.user_id == test_user.id)
+            .values(built_at=datetime.now(UTC))
+            .execution_options(synchronize_session=False)
+        )
+        await db_session.commit()
+        return "ok", "sid"
+
+    async def fake_curate(session: AsyncSession, user: UserModel, channel: object = None) -> tuple[int, int]:
+        calls["curated"] = True
+        return 1, 1
+
+    monkeypatch.setattr(feed, "run_subagent", fake_build)
+    monkeypatch.setattr(runtime, "curate_feed", fake_curate)
+
+    result = await feed.run_for_user(db_session, feedable_conn)  # type: ignore[arg-type]
+    # Without expire_all() the stale instance would still read built_at=None → "profile build failed".
+    assert calls.get("curated") is True
+    assert result.note != "profile build failed"
