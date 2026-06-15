@@ -12,7 +12,7 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from src.agent.deps import AgentDeps
 from src.agent.mcp import reachable_mcp_servers
-from src.agent.tools import CHAT_TOOLS, PROFILE_TOOLS
+from src.agent.tools import BASE_TOOLS, MAIN_TOOLS
 from src.core.config import settings
 
 _PROMPTS = Path(__file__).parent / "prompts"
@@ -28,12 +28,15 @@ def _model(name: str) -> OpenAIChatModel:
     return OpenAIChatModel(name, provider=provider)
 
 
-def make_profile_agent() -> Agent[AgentDeps, str]:
+async def make_subagent(prompt_file: str, model_name: str) -> Agent[AgentDeps, str]:
+    """A sub-agent gets BASE_TOOLS (everything the main agent has *except* spawn_subagent —
+    the structural anti-recursion guarantee) plus the same reachable MCP sources as chat."""
     return Agent(
-        _model(settings.profile_model),
+        _model(model_name),
         deps_type=AgentDeps,
-        system_prompt=_prompt("profile_builder.md"),
-        tools=PROFILE_TOOLS,
+        system_prompt=_prompt(prompt_file),
+        tools=BASE_TOOLS,
+        toolsets=await reachable_mcp_servers(),
     )
 
 
@@ -54,6 +57,6 @@ async def make_chat_agent() -> Agent[AgentDeps, str]:
         _model(settings.agent_model),
         deps_type=AgentDeps,
         system_prompt=_prompt("chat.md"),
-        tools=CHAT_TOOLS,
+        tools=MAIN_TOOLS,
         toolsets=await reachable_mcp_servers(),
     )

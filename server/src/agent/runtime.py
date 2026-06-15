@@ -1,8 +1,9 @@
-"""Orchestration entry points: build_profile, chat, curate_feed. Chat and the scheduled
+"""Orchestration entry points: chat, curate_feed, compact, reset. Chat and the scheduled
 feed share one agent and one persisted history. Agents deliver via the send_message tool
-(deps.channel), not via return values; returns are for the caller's bookkeeping."""
+(deps.channel), not via return values; returns are for the caller's bookkeeping.
 
-from uuid import UUID
+Profile building is no longer a top-level entry point — it's the ``profile_build`` sub-agent
+kind (src/agent/subagents.py) that the chat agent spawns when it sees an empty profile."""
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,12 +11,10 @@ from src.agent import agents
 from src.agent.channels import Channel
 from src.agent.deps import AgentDeps
 from src.core.config import settings
-from src.core.database import AsyncSessionLocal
 from src.core.exceptions import AppError
 from src.models.postgres.users import UserModel
 from src.repositories.agent_messages import AgentMessageRepository
 from src.repositories.profiles import ProfileRepository
-from src.repositories.users import UserRepository
 
 logger = structlog.get_logger()
 
@@ -33,33 +32,6 @@ def _deps(session: AsyncSession, user: UserModel, channel: Channel | None = None
         github_username=user.github_username,
         channel=channel,
     )
-
-
-async def build_profile(session: AsyncSession, user: UserModel, channel: Channel | None = None) -> str:
-    """(Re)build the interest profile via the explore sub-agent; it messages the user when done."""
-    _require_agent()
-    agent = agents.make_profile_agent()
-    prompt = (
-        f"Build the interest profile for GitHub user @{user.github_username}. "
-        "Investigate their repos and dependencies, then fill in every profile section. "
-        "When done, send the user a short message that their profile is ready."
-    )
-    async with agent:
-        result = await agent.run(prompt, deps=_deps(session, user, channel))
-    await ProfileRepository(session).mark_built(user.id)
-    logger.info("profile_built", user_id=str(user.id))
-    return result.output
-
-
-async def build_profile_safe(user_id: UUID, channel: Channel | None = None) -> None:
-    """Fire-and-forget profile build with its own session (first connect, /init)."""
-    try:
-        async with AsyncSessionLocal() as session:
-            user = await UserRepository(session).get_user(user_id)
-            if user is not None and user.github_username:
-                await build_profile(session, user, channel)
-    except Exception as exc:
-        logger.warning("profile_build_failed", user_id=str(user_id), error=str(exc))
 
 
 async def chat(session: AsyncSession, user: UserModel, message: str, channel: Channel | None = None) -> None:

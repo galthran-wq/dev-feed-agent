@@ -1,5 +1,8 @@
-"""Channel-agnostic entry for an inbound message: dispatch /init·/reset·/compact, else chat.
-The caller owns the session and the resolved user, so this runs in-request or detached."""
+"""Channel-agnostic entry for an inbound message: dispatch /reset·/compact, else chat.
+The caller owns the session and the resolved user, so this runs in-request or detached.
+
+There is no /init: a new user's first free-text message goes to the chat agent, which detects
+an empty profile and spawns the profile_build sub-agent itself (no canned text)."""
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,15 +24,6 @@ async def process_incoming(channel: Channel, session: AsyncSession, user: UserMo
     if text == "/reset":
         await runtime.reset(session, user)
         await channel.send("🧹 Cleared our conversation history. Your interest profile is kept.")
-        return
-
-    if text == "/init":
-        if not settings.agent_enabled:
-            await channel.send(_AGENT_DISABLED)
-            return
-        await channel.send("🔧 Rebuilding your interest profile from your GitHub activity…")
-        # Manages its own session and messages the user on completion.
-        await runtime.build_profile_safe(user.id, channel)
         return
 
     if text == "/compact":

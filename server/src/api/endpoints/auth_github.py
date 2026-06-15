@@ -1,5 +1,6 @@
-"""GitHub OAuth sign-in endpoints. On success we mint the same JWT the rest of the
-app uses, and on first connect we kick off the profile build in the background."""
+"""GitHub OAuth sign-in endpoints. On success we mint the same JWT the rest of the app uses.
+The profile is no longer pre-warmed here — it's built lazily on first chat by the
+profile_build sub-agent, so there is exactly one build path."""
 
 import asyncio
 
@@ -88,29 +89,20 @@ async def github_callback(
         logger.warning("github_oauth_failed", error=str(exc))
         raise AppError(status_code=400, detail="GitHub authorization failed") from exc
 
-    user, created = await UserRepository(session).upsert_github_user(
+    user, _created = await UserRepository(session).upsert_github_user(
         gh_user.github_id, gh_user.username, token, gh_user.avatar_url
     )
     # Every user needs a connection row (holds the Telegram link code).
     await ConnectionRepository(session).get_or_create(user.id)
 
-    # Telegram-initiated login: auto-link this chat to the user (no /start code needed),
-    # and route the profile build's "ready" message back to that chat.
-    channel: Channel | None = None
+    # Telegram-initiated login: auto-link this chat to the user (no /start code needed).
     tg_chat = github_oauth.state_tg_chat(state)
     if tg_chat:
         linked = await ConnectionRepository(session).link_chat_to_user(user.id, tg_chat)
         if linked:
-            channel = TelegramChannel(tg_chat)
-            asyncio.create_task(_notify_linked(channel))  # noqa: RUF006
+            asyncio.create_task(_notify_linked(TelegramChannel(tg_chat)))  # noqa: RUF006
         else:
             logger.warning("github_oauth_tg_link_refused", user_id=str(user.id))
-
-    if created and settings.agent_enabled:
-        # Fire-and-forget the initial profile build; the user lands on a "building" state.
-        from src.agent import runtime
-
-        asyncio.create_task(runtime.build_profile_safe(user.id, channel))  # noqa: RUF006
 
     jwt_token = create_token_for_user(user)
     # Deliver the JWT in the URL fragment, not the query string: fragments are never

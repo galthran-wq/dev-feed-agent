@@ -23,16 +23,12 @@ def _wire(monkeypatch: pytest.MonkeyPatch) -> dict:
         calls["compact"] = user.id
         return "carried summary"
 
-    async def fake_build(user_id: object, channel: object = None) -> None:
-        calls["build"] = user_id
-
     async def fake_chat(session: AsyncSession, user: UserModel, text: str, channel: object = None) -> None:
         calls["chat"] = text
         await channel.send("agent reply")  # type: ignore[union-attr]
 
     monkeypatch.setattr(runtime, "reset", fake_reset)
     monkeypatch.setattr(runtime, "compact", fake_compact)
-    monkeypatch.setattr(runtime, "build_profile_safe", fake_build)
     monkeypatch.setattr(runtime, "chat", fake_chat)
     return calls
 
@@ -49,12 +45,6 @@ async def test_dispatch_compact(_wire: dict, db_session: AsyncSession, test_user
     await messaging.process_incoming(ch, db_session, test_user, "/compact")
     assert _wire["compact"] == test_user.id
     assert any("carried summary" in m for m in ch.messages)
-
-
-async def test_dispatch_init(_wire: dict, db_session: AsyncSession, test_user: UserModel) -> None:
-    ch = CollectingChannel()
-    await messaging.process_incoming(ch, db_session, test_user, "/init")
-    assert _wire["build"] == test_user.id
 
 
 async def test_dispatch_free_text_goes_to_chat(_wire: dict, db_session: AsyncSession, test_user: UserModel) -> None:
