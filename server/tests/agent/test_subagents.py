@@ -201,6 +201,31 @@ def test_prime_history_refreshes_system_prompt() -> None:
     assert user_parts == ["hi"]
 
 
+async def test_primed_history_delivers_current_prompt_to_model() -> None:
+    # Load-bearing: the model must actually RECEIVE the current system prompt (pydantic-ai merges
+    # the leading system-only request with the next request). Guards against a pydantic-ai bump.
+    from pydantic_ai import Agent
+    from pydantic_ai.messages import ModelRequest, ModelResponse, SystemPromptPart, TextPart, UserPromptPart
+    from pydantic_ai.models.function import FunctionModel
+    from src.agent.runtime import _prime_history
+
+    seen: dict = {}
+
+    def capture(messages: list, info: object) -> ModelResponse:
+        seen["system"] = [
+            p.content for m in messages for p in getattr(m, "parts", []) if isinstance(p, SystemPromptPart)
+        ]
+        return ModelResponse(parts=[TextPart(content="ok")])
+
+    agent = Agent(FunctionModel(capture), deps_type=dict)  # no system_prompt, like make_chat_agent
+    stale = [
+        ModelRequest(parts=[SystemPromptPart(content="STALE"), UserPromptPart(content="old")]),
+        ModelResponse(parts=[TextPart(content="r")]),
+    ]
+    await agent.run("new", message_history=_prime_history(stale, "CURRENT"), deps={})
+    assert seen["system"] == ["CURRENT"]  # stale gone, current delivered
+
+
 def test_main_only_tools_are_excluded_from_subagents() -> None:
     # send_message: only the main agent talks to the user.
     assert send_message in MAIN_TOOLS

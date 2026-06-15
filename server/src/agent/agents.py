@@ -56,15 +56,17 @@ async def make_subagent(prompt_file: str, model_name: str) -> Agent[AgentDeps, s
     )
 
 
+SUMMARIZER_PROMPT = (
+    "You compact a conversation for your future self. Given the prior messages, write a "
+    "tight note capturing durable facts about the user, their stated preferences, current "
+    "focus, and what's already been shown. Be concise; omit small talk. Do not call tools."
+)
+
+
 def make_summarizer_agent() -> Agent[None, str]:
-    return Agent(
-        _model(settings.agent_model),
-        system_prompt=(
-            "You compact a conversation for your future self. Given the prior messages, write a "
-            "tight note capturing durable facts about the user, their stated preferences, current "
-            "focus, and what's already been shown. Be concise; omit small talk. Do not call tools."
-        ),
-    )
+    # system_prompt is for the empty-history case; compact always has history and injects
+    # SUMMARIZER_PROMPT via _prime_history (else the frozen chat prompt from history would win).
+    return Agent(_model(settings.agent_model), system_prompt=SUMMARIZER_PROMPT)
 
 
 def build_chat_system_prompt(channel: "Channel | None") -> str:

@@ -80,8 +80,11 @@ async def compact(session: AsyncSession, user: UserModel) -> str:
     if not history:
         return "Nothing to compact yet."
     agent = agents.make_summarizer_agent()
+    # Same freeze applies: with history, the agent's system_prompt is ignored — inject the
+    # summarizer prompt so it isn't replaced by a stale chat/summary prompt from history.
+    primed = _prime_history(history, agents.SUMMARIZER_PROMPT)
     async with agent:
-        result = await agent.run("Summarize the conversation so far.", message_history=history)
+        result = await agent.run("Summarize the conversation so far.", message_history=primed)
     await msg_repo.replace_with_summary(user.id, result.output)
     logger.info("history_compacted", user_id=str(user.id))
     return result.output
