@@ -159,6 +159,16 @@ async def test_feed_gather_kind_registered() -> None:
 # --- wiring: only the main agent may message or spawn --------------------------------------
 
 
+def test_today_note_grounds_the_real_date() -> None:
+    from datetime import UTC, datetime
+
+    from src.agent.agents import _today_note
+
+    note = _today_note()
+    assert datetime.now(UTC).strftime("%Y-%m-%d") in note  # real date, not invented
+    assert "Never guess, invent, or advance" in note
+
+
 def test_main_only_tools_are_excluded_from_subagents() -> None:
     # send_message: only the main agent talks to the user.
     assert send_message in MAIN_TOOLS

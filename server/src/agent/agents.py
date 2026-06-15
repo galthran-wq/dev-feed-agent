@@ -4,6 +4,7 @@ A fresh ``Agent`` per run avoids shared mutable state across concurrent requests
 ``make_chat_agent`` is async because it probes its MCP sources first (see ``mcp.py``).
 """
 
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
@@ -26,6 +27,17 @@ def _prompt(name: str) -> str:
 def _model(name: str) -> OpenAIChatModel:
     provider = OpenAIProvider(base_url=settings.openrouter_base_url, api_key=settings.openrouter_api_key)
     return OpenAIChatModel(name, provider=provider)
+
+
+def _today_note() -> str:
+    """The model has no clock — without this it invents the date (and advances it off the
+    previous digest in the shared history). Inject the real date so any date it writes is right."""
+    today = datetime.now(UTC)
+    return (
+        f"The current date is {today:%Y-%m-%d} ({today:%A, %d %B %Y}). Use this for any date you "
+        "mention (e.g. a feed heading). Never guess, invent, or advance the date, and ignore "
+        "dates that appear in earlier messages — only this one is authoritative."
+    )
 
 
 async def make_subagent(prompt_file: str, model_name: str) -> Agent[AgentDeps, str]:
@@ -56,7 +68,7 @@ async def make_chat_agent() -> Agent[AgentDeps, str]:
     return Agent(
         _model(settings.agent_model),
         deps_type=AgentDeps,
-        system_prompt=_prompt("chat.md"),
+        system_prompt=(_prompt("chat.md"), _today_note()),
         tools=MAIN_TOOLS,
         toolsets=await reachable_mcp_servers(),
     )
