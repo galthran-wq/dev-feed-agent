@@ -2,7 +2,7 @@ import pytest
 from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from src.agent.channels import telegram as tg
 from src.agent.channels.base import CollectingChannel
-from src.agent.channels.telegram import _chunks, _fix_bare_amps, _strip_tags
+from src.agent.channels.telegram import _chunks, _fix_bare_amps, _strip_tags, _to_telegram_html
 
 
 def test_chunks_preserves_blank_lines() -> None:
@@ -37,6 +37,31 @@ def test_strip_tags_keeps_literal_angle_brackets() -> None:
 def test_fix_bare_amps_escapes_only_non_entities() -> None:
     assert _fix_bare_amps("https://x/a?b=1&c=2") == "https://x/a?b=1&amp;c=2"
     assert _fix_bare_amps("already &amp; fine &#39;q&#39;") == "already &amp; fine &#39;q&#39;"
+
+
+def test_to_telegram_html_converts_markdown() -> None:
+    # The fallback-path markdown the user saw: **bold** and `code`.
+    assert _to_telegram_html("честно искал, вернули **пусто**") == "честно искал, вернули <b>пусто</b>"
+    assert _to_telegram_html("два вызова `find_github_issues`") == "два вызова <code>find_github_issues</code>"
+    assert (
+        _to_telegram_html("see [UniFace](https://github.com/x/y)") == 'see <a href="https://github.com/x/y">UniFace</a>'
+    )
+
+
+def test_to_telegram_html_escapes_plain_specials() -> None:
+    assert _to_telegram_html("if x < 3 && y") == "if x &lt; 3 &amp;&amp; y"
+
+
+def test_to_telegram_html_leaves_existing_html_untouched() -> None:
+    # The feed digest is already HTML — don't double-process it.
+    digest = '🤖 <b>LLMs</b>\n• <a href="https://x">GLM</a> — open model'
+    assert _to_telegram_html(digest) == digest
+
+
+def test_to_telegram_html_does_not_mistake_comparisons_for_tags() -> None:
+    # Dev chat with bare "<" (no closing ">") must still be escaped + markdown-converted,
+    # not mistaken for HTML and passed through raw.
+    assert _to_telegram_html("if a<b and b<c then **bold**") == "if a&lt;b and b&lt;c then <b>bold</b>"
 
 
 def test_channel_format_instructions() -> None:

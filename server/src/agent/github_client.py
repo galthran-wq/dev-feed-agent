@@ -4,17 +4,26 @@ Scoped to a single user's OAuth token (or unauthenticated with lower rate limits
 Returns plain dicts/lists — the tools shape them into compact text for the model.
 """
 
+import asyncio
 import base64
 import re
 from typing import Any
 from urllib.parse import quote
 
 import httpx
+import structlog
+
+logger = structlog.get_logger()
 
 _API = "https://api.github.com"
 _MANIFESTS = ("pyproject.toml", "requirements.txt", "package.json")
 # owner/name — reject anything that could traverse to another API path.
 _FULL_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+# GitHub forbids concurrent requests for a single user and aggressively secondary-rate-limits
+# (403) bursts to the low-quota Search API. The feed fan-out runs many gatherers in parallel,
+# each searching — so serialize search across the whole process to avoid the 403 storm.
+_SEARCH_GATE = asyncio.Semaphore(1)
 
 
 def _safe_full_name(full_name: str) -> str:
@@ -35,6 +44,28 @@ class GithubClient:
             resp = await client.get(f"{_API}{path}", params=params)
             resp.raise_for_status()
             return resp.json()
+
+    async def _search(self, path: str, params: dict[str, Any]) -> Any:
+        """Search endpoints, serialized across the process and retried on secondary rate limits
+        (403/429) so parallel feed gatherers don't trip GitHub's burst protection."""
+        async with _SEARCH_GATE:
+            for attempt in range(3):
+                try:
+                    return await self._get(path, params)
+                except httpx.HTTPStatusError as exc:
+                    status = exc.response.status_code
+                    if status in (403, 429) and attempt < 2:
+                        retry_after = exc.response.headers.get("retry-after")
+                        # Clamp: the gate is held during this sleep, so don't let a big Retry-After
+                        # (GitHub often says 60s) stall every other search behind one call.
+                        delay = min(
+                            float(retry_after) if retry_after and retry_after.isdigit() else 2.0 * (attempt + 1), 30.0
+                        )
+                        logger.warning("github_search_rate_limited", status=status, delay=delay, attempt=attempt)
+                        await asyncio.sleep(delay)
+                        continue
+                    raise
+        return None  # unreachable; loop either returns or raises
 
     async def list_owned_repos(self, limit: int = 50) -> list[dict[str, Any]]:
         repos = await self._get("/user/repos", {"per_page": min(limit, 100), "sort": "pushed", "affiliation": "owner"})
@@ -69,11 +100,11 @@ class GithubClient:
         return found
 
     async def search_issues(self, query: str, limit: int = 30) -> list[dict[str, Any]]:
-        data = await self._get("/search/issues", {"q": query, "sort": "created", "order": "desc", "per_page": limit})
+        data = await self._search("/search/issues", {"q": query, "sort": "created", "order": "desc", "per_page": limit})
         return [_issue_summary(i) for i in data.get("items", [])[:limit]]
 
     async def search_repos(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
-        data = await self._get(
+        data = await self._search(
             "/search/repositories", {"q": query, "sort": "stars", "order": "desc", "per_page": limit}
         )
         return [_repo_summary(r) for r in data.get("items", [])[:limit]]
