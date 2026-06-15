@@ -37,10 +37,28 @@ _TAG_RE = re.compile(
 # Ampersands that aren't already an entity: the usual reason an unescaped URL (?a=1&b=2) makes
 # Telegram reject the whole HTML message. Fixed server-side so we don't rely on the LLM.
 _BARE_AMP_RE = re.compile(r"&(?!#?\w+;)")
+# Detect text that is already Telegram HTML (e.g. the feed digest) so we don't double-process it.
+_HTML_TAG_RE = re.compile(r"</?(?:b|strong|i|em|u|ins|s|strike|del|code|pre|blockquote|a|tg-spoiler|span)\b", re.I)
+_MD_CODE_RE = re.compile(r"`([^`\n]+)`")
+_MD_BOLD_RE = re.compile(r"\*\*([^*\n]+)\*\*")
+_MD_LINK_RE = re.compile(r"\[([^\]\n]+)\]\((https?://[^)\s]+)\)")
 
 
 def _fix_bare_amps(text: str) -> str:
     return _BARE_AMP_RE.sub("&amp;", text)
+
+
+def _to_telegram_html(text: str) -> str:
+    """The model often answers in Markdown — especially on the no-send fallback path — which
+    Telegram's HTML mode renders literally (raw ``**`` and backticks). If the text isn't already
+    HTML, escape it and convert the common Markdown tokens (bold, code, links) to Telegram tags."""
+    if _HTML_TAG_RE.search(text):
+        return text  # already HTML (e.g. the feed digest) — leave it
+    t = html.escape(text, quote=False)  # neutralize & < > in the prose first
+    t = _MD_CODE_RE.sub(lambda m: f"<code>{m.group(1)}</code>", t)
+    t = _MD_BOLD_RE.sub(r"<b>\1</b>", t)
+    t = _MD_LINK_RE.sub(r'<a href="\2">\1</a>', t)
+    return t
 
 
 def _strip_tags(text: str) -> str:
@@ -93,17 +111,16 @@ class TelegramChannel:
 
         bot = get_bot()
         for chunk in _chunks(text):
+            rendered = _fix_bare_amps(_to_telegram_html(chunk))
             try:
-                await bot.send_message(
-                    self.chat_id, _fix_bare_amps(chunk), parse_mode="HTML", disable_web_page_preview=True
-                )
+                await bot.send_message(self.chat_id, rendered, parse_mode="HTML", disable_web_page_preview=True)
             except TelegramBadRequest as exc:
                 # A 400 means the HTML was malformed (a stray <, a tag split across chunks) and the
                 # message was NOT delivered — so here, and only here, resend it tag-stripped so the
                 # content isn't lost. Network/flood errors propagate to upstream containment; retrying
                 # them could double-send a message Telegram may already have delivered.
                 logger.warning("telegram_html_send_failed", chat_id=self.chat_id, error=str(exc))
-                await bot.send_message(self.chat_id, _strip_tags(chunk), disable_web_page_preview=True)
+                await bot.send_message(self.chat_id, _strip_tags(rendered), disable_web_page_preview=True)
 
 
 async def setup_webhook() -> None:
