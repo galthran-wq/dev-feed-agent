@@ -7,14 +7,18 @@ A fresh ``Agent`` per run avoids shared mutable state across concurrent requests
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from src.agent.deps import AgentDeps
 from src.agent.mcp import reachable_mcp_servers
 from src.agent.tools import BASE_TOOLS, MAIN_TOOLS
 from src.core.config import settings
+
+if TYPE_CHECKING:
+    from src.agent.channels import Channel
 
 _PROMPTS = Path(__file__).parent / "prompts"
 
@@ -63,22 +67,24 @@ def make_summarizer_agent() -> Agent[None, str]:
     )
 
 
+def build_chat_system_prompt(channel: "Channel | None") -> str:
+    """The chat agent's full system prompt, assembled fresh per run. NOT set on the Agent via
+    `system_prompt=`: pydantic-ai freezes that into persisted history and never refreshes it
+    when message_history is passed (which chat and the feed always do), so prompt changes would
+    never reach an existing user. Instead runtime injects this into the history each run.
+    Date note first (most salient); channel formatting last (it's channel-specific)."""
+    parts = [_today_note(), _prompt("chat.md")]
+    if channel is not None:
+        parts.append(f"## Formatting for this channel\n\n{channel.format_instructions}")
+    return "\n\n".join(parts)
+
+
 async def make_chat_agent() -> Agent[AgentDeps, str]:
-    """Wires in only reachable MCP sources so a dead one is skipped, not fatal to the run."""
-    agent = Agent(
+    """Wires in only reachable MCP sources so a dead one is skipped, not fatal to the run.
+    System prompt is injected per run via build_chat_system_prompt (see its docstring)."""
+    return Agent(
         _model(settings.agent_model),
         deps_type=AgentDeps,
-        # Date note FIRST so it's at the very top of the system prompt — most salient, least
-        # likely to be drowned out by the long instructions below.
-        system_prompt=(_today_note(), _prompt("chat.md")),
         tools=MAIN_TOOLS,
         toolsets=await reachable_mcp_servers(),
     )
-
-    @agent.system_prompt
-    def _channel_format(ctx: RunContext[AgentDeps]) -> str:
-        # The channel decides the markup; tell the agent how to format for wherever it delivers.
-        channel = ctx.deps.channel
-        return f"## Formatting for this channel\n\n{channel.format_instructions}" if channel else ""
-
-    return agent

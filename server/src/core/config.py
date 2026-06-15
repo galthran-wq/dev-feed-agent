@@ -61,9 +61,8 @@ class Settings(BaseSettings):
     # --- Feed curation ---
     discovery_enabled: bool = True
     poll_interval_minutes: int = 60
-    feed_size: int = 8
-    # Share of each feed reserved for exploration vs exploitation of known interests.
-    explore_ratio: float = 0.3
+    # No fixed feed size: the agent surfaces every fresh, relevant item that clears the quality
+    # bar (one compact line each), leaning exploit with some explore — see prompts/chat.md.
     agent_history_token_budget: int = 12000
 
     @property
