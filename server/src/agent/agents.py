@@ -68,7 +68,9 @@ async def make_chat_agent() -> Agent[AgentDeps, str]:
     return Agent(
         _model(settings.agent_model),
         deps_type=AgentDeps,
-        system_prompt=(_prompt("chat.md"), _today_note()),
+        # Date note FIRST so it's at the very top of the system prompt — most salient, least
+        # likely to be drowned out by the long instructions below.
+        system_prompt=(_today_note(), _prompt("chat.md")),
         tools=MAIN_TOOLS,
         toolsets=await reachable_mcp_servers(),
     )
