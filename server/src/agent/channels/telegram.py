@@ -24,17 +24,28 @@ _TELEGRAM_FORMAT = (
     "title) — never paste a bare URL on its own line.\n"
     "- Use <b> for section/category headings and for item titles.\n"
     "- Do NOT use Markdown (*, _, #, backticks, [text](url)), tables, or any tag not listed above.\n"
-    "- Escape the characters & < > as &amp; &lt; &gt; in visible text and inside href URLs "
-    "(e.g. https://x.com/a?b=1&amp;c=2); leave your real tags unescaped.\n"
+    "- Escape a literal < or > in visible text as &lt; / &gt; (e.g. writing 'a &lt; b'). You do "
+    "NOT need to escape & in URLs — that's handled for you. Leave your real tags unescaped.\n"
     "- Emojis are welcome for visual structure."
 )
 
-_TAG_RE = re.compile(r"<[^>]+>")
+# Only Telegram's own tags — so the plain-text fallback strips formatting without eating a
+# literal '<' in text (e.g. "if x<3"), which is itself a common cause of the parse failure.
+_TAG_RE = re.compile(
+    r"</?(?:b|strong|i|em|u|ins|s|strike|del|code|pre|blockquote|a|tg-spoiler|span)(?:\s[^>]*)?>", re.IGNORECASE
+)
+# Ampersands that aren't already an entity: the usual reason an unescaped URL (?a=1&b=2) makes
+# Telegram reject the whole HTML message. Fixed server-side so we don't rely on the LLM.
+_BARE_AMP_RE = re.compile(r"&(?!#?\w+;)")
+
+
+def _fix_bare_amps(text: str) -> str:
+    return _BARE_AMP_RE.sub("&amp;", text)
 
 
 def _strip_tags(text: str) -> str:
-    """Plain-text fallback: drop tags and decode entities so a parse failure still delivers
-    readable text instead of raw <a href=…> markup."""
+    """Plain-text fallback: drop Telegram tags and decode entities so a parse failure still
+    delivers readable text instead of raw <a href=…> markup."""
     return html.unescape(_TAG_RE.sub("", text))
 
 
@@ -78,13 +89,19 @@ class TelegramChannel:
         self.chat_id = chat_id
 
     async def send(self, text: str) -> None:
+        from aiogram.exceptions import TelegramBadRequest  # lazy: keep aiogram out of import time
+
         bot = get_bot()
         for chunk in _chunks(text):
             try:
-                await bot.send_message(self.chat_id, chunk, parse_mode="HTML", disable_web_page_preview=True)
-            except Exception as exc:
-                # Malformed HTML (e.g. an unescaped & in a URL, or a tag split across chunks) makes
-                # Telegram reject the whole message. Never lose the content: resend it tag-stripped.
+                await bot.send_message(
+                    self.chat_id, _fix_bare_amps(chunk), parse_mode="HTML", disable_web_page_preview=True
+                )
+            except TelegramBadRequest as exc:
+                # A 400 means the HTML was malformed (a stray <, a tag split across chunks) and the
+                # message was NOT delivered — so here, and only here, resend it tag-stripped so the
+                # content isn't lost. Network/flood errors propagate to upstream containment; retrying
+                # them could double-send a message Telegram may already have delivered.
                 logger.warning("telegram_html_send_failed", chat_id=self.chat_id, error=str(exc))
                 await bot.send_message(self.chat_id, _strip_tags(chunk), disable_web_page_preview=True)
 

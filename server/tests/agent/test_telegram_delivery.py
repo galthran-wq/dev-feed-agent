@@ -1,7 +1,8 @@
 import pytest
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from src.agent.channels import telegram as tg
 from src.agent.channels.base import CollectingChannel
-from src.agent.channels.telegram import _chunks, _strip_tags
+from src.agent.channels.telegram import _chunks, _fix_bare_amps, _strip_tags
 
 
 def test_chunks_preserves_blank_lines() -> None:
@@ -26,6 +27,18 @@ def test_strip_tags_drops_tags_and_decodes_entities() -> None:
     assert _strip_tags('<b>Hi</b> &amp; <a href="u">link</a>') == "Hi & link"
 
 
+def test_strip_tags_keeps_literal_angle_brackets() -> None:
+    # Only real Telegram tags are stripped; a literal < in text (the very thing that often
+    # triggers the parse failure) must survive the fallback, not be eaten.
+    assert _strip_tags("if x<3 and y>2") == "if x<3 and y>2"
+    assert _strip_tags("<b>x</b> y<z") == "x y<z"
+
+
+def test_fix_bare_amps_escapes_only_non_entities() -> None:
+    assert _fix_bare_amps("https://x/a?b=1&c=2") == "https://x/a?b=1&amp;c=2"
+    assert _fix_bare_amps("already &amp; fine &#39;q&#39;") == "already &amp; fine &#39;q&#39;"
+
+
 def test_channel_format_instructions() -> None:
     # Telegram declares HTML with inline links; the HTTP/test channel declares plain text.
     assert "<a href" in tg.TelegramChannel("1").format_instructions
@@ -44,16 +57,32 @@ async def test_send_uses_html_parse_mode(monkeypatch: pytest.MonkeyPatch) -> Non
     assert calls and calls[0][1] == "HTML"
 
 
-async def test_send_falls_back_to_plain_on_parse_error(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_send_falls_back_to_plain_on_bad_request(monkeypatch: pytest.MonkeyPatch) -> None:
     sent_plain: list[str] = []
 
     class FakeBot:
         async def send_message(self, chat_id: str, text: str, parse_mode: str | None = None, **_: object) -> None:
             if parse_mode == "HTML":
-                raise RuntimeError("Bad Request: can't parse entities")
+                raise TelegramBadRequest(method=None, message="can't parse entities")  # type: ignore[arg-type]
             sent_plain.append(text)
 
     monkeypatch.setattr(tg, "get_bot", lambda: FakeBot())
     await tg.TelegramChannel("1").send('<b>Hi</b> &amp; <a href="u">link</a>')
     # content delivered, tags stripped + entities decoded
     assert sent_plain == ["Hi & link"]
+
+
+async def test_send_does_not_double_send_on_network_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+
+    class FakeBot:
+        async def send_message(self, chat_id: str, text: str, parse_mode: str | None = None, **_: object) -> None:
+            nonlocal calls
+            calls += 1
+            raise TelegramNetworkError(method=None, message="timeout")  # type: ignore[arg-type]
+
+    monkeypatch.setattr(tg, "get_bot", lambda: FakeBot())
+    # A network error may mean the message WAS delivered — must propagate, not retry (no double-send).
+    with pytest.raises(TelegramNetworkError):
+        await tg.TelegramChannel("1").send("hi")
+    assert calls == 1
