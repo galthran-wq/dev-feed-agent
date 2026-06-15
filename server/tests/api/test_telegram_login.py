@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -75,6 +77,19 @@ async def test_send_login_prompt_builds_signed_button(monkeypatch: pytest.Monkey
     # the button's token round-trips back to this chat id
     token = url.split("tg=", 1)[1]
     assert github_oauth.read_tg_link_token(token) == "777"
+
+
+async def test_typing_indicator_sends_chat_action(monkeypatch: pytest.MonkeyPatch) -> None:
+    actions: list[tuple[str, str]] = []
+
+    class FakeBot:
+        async def send_chat_action(self, chat_id: str, action: str) -> None:
+            actions.append((chat_id, action))
+
+    monkeypatch.setattr(tg, "get_bot", lambda: FakeBot())
+    async with tg._typing("777"):
+        await asyncio.sleep(0.05)  # let the keeper fire once
+    assert actions and actions[0] == ("777", "typing")
 
 
 async def test_callback_links_telegram_chat(

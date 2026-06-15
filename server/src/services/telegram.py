@@ -1,6 +1,10 @@
 """Telegram *inbound*: /start linking + chat_id→user, then hand off to the channel-agnostic
 process_incoming. Outbound delivery is a channel (agent/channels/telegram.py)."""
 
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
+
 import structlog
 from src.agent.channels import TelegramChannel, get_bot
 from src.core.config import settings
@@ -13,6 +17,30 @@ from src.services.messaging import GENERIC_ERROR, process_incoming
 logger = structlog.get_logger()
 
 _NOT_LINKED = "This chat isn't linked yet. Link it from the web app first."
+_TYPING_INTERVAL = 4.0  # Telegram's "typing…" lasts ~5s; refresh under that.
+
+
+@asynccontextmanager
+async def _typing(chat_id: str) -> AsyncIterator[None]:
+    """Show Telegram 'typing…' for the duration — agent turns take seconds. Best-effort:
+    re-sent periodically in the background and cancelled once handling finishes."""
+
+    async def _loop() -> None:
+        bot = get_bot()
+        while True:
+            try:
+                await bot.send_chat_action(chat_id=chat_id, action="typing")
+            except Exception:
+                return  # typing is cosmetic; never let it disrupt handling
+            await asyncio.sleep(_TYPING_INTERVAL)
+
+    task = asyncio.create_task(_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
 
 
 async def _send_login_prompt(chat_id: str) -> None:
@@ -57,21 +85,22 @@ async def handle_update(chat_id: str, text: str) -> None:
     channel = TelegramChannel(chat_id)
     stripped = (text or "").strip()
     try:
-        if stripped.startswith("/start"):
-            await _handle_start(channel, chat_id, stripped[len("/start") :].strip())
-            return
+        async with _typing(chat_id):
+            if stripped.startswith("/start"):
+                await _handle_start(channel, chat_id, stripped[len("/start") :].strip())
+                return
 
-        async with AsyncSessionLocal() as session:
-            conn = await ConnectionRepository(session).get_by_telegram_chat_id(chat_id)
-            if conn is None:
-                await _send_login_prompt(chat_id)
-                return
-            user = await UserRepository(session).get_user(conn.user_id)
-            if user is None:  # connection exists but user gone — shouldn't happen
-                logger.error("telegram_chat_user_missing", chat_id=chat_id, user_id=str(conn.user_id))
-                await channel.send(GENERIC_ERROR)
-                return
-            await process_incoming(channel, session, user, text)
+            async with AsyncSessionLocal() as session:
+                conn = await ConnectionRepository(session).get_by_telegram_chat_id(chat_id)
+                if conn is None:
+                    await _send_login_prompt(chat_id)
+                    return
+                user = await UserRepository(session).get_user(conn.user_id)
+                if user is None:  # connection exists but user gone — shouldn't happen
+                    logger.error("telegram_chat_user_missing", chat_id=chat_id, user_id=str(conn.user_id))
+                    await channel.send(GENERIC_ERROR)
+                    return
+                await process_incoming(channel, session, user, text)
     except Exception as exc:
         logger.error("telegram_update_failed", chat_id=chat_id, error=str(exc))
         try:
