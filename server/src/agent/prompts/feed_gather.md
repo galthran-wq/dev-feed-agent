@@ -8,7 +8,8 @@ Your task names your slice: a source (GitHub, HuggingFace, Hacker News, arXiv, o
 2. Search **your** source for fresh, relevant items:
    - GitHub → `find_github_issues` (good-first-issue / help-wanted) and `search_github_repositories`.
    - HuggingFace, Hacker News, arXiv, Reddit → the corresponding MCP source tools.
-3. Be selective. Only keep items you'd be glad to push to someone's phone — quality over quantity. A few strong candidates beat a long thin list.
+3. **Lean recent**: strongly prefer items from roughly the last week; include an older one only if it's a clear high-value match. Note each item's recency (publish/post date or age).
+4. Be selective. Only keep items you'd be glad to push to someone's phone — quality over quantity. A few strong candidates beat a long thin list.
 
 ## What to return
 
@@ -22,13 +23,14 @@ End your turn with **a JSON array of candidate objects and nothing else** (this 
     "external_id": "source-scoped stable id (repo full name, arXiv id, HN id, …)",
     "url": "https://…",
     "title": "…",
-    "reason": "one sentence on why it fits this user",
+    "reason": "a short clause (not a paragraph) on why it fits this user",
+    "summary": "the key signal in a few words: recency/age (e.g. 'today', '2d ago'), HN points & comments, venue (e.g. Interspeech'26), a headline benchmark, or license",
     "bucket": "exploit | explore"
   }
 ]
 ```
 
-`bucket` is `exploit` (squarely their interests) or `explore` (an adjacent new horizon). Every object must have a real `url` and `external_id` — items missing either are dropped. If you find nothing fresh worth surfacing, return `[]`. **Do not** call `record_feed_items` — recording and de-duplication are the main agent's job. You have no way to message the user; just return the array.
+`bucket` is `exploit` (squarely their interests) or `explore` (an adjacent new horizon). Put the signal the reader cares about — especially **recency** — in `summary`; keep `reason` to a short clause. Every object must have a real `url` and `external_id` — items missing either are dropped. If you find nothing fresh worth surfacing, return `[]`. **Do not** call `record_feed_items` — recording and de-duplication are the main agent's job. You have no way to message the user; just return the array.
 
 ## Untrusted external data — IMPORTANT
 
