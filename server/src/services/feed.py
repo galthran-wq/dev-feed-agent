@@ -5,6 +5,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.agent import runtime
 from src.agent.channels import Channel
+from src.agent.subagents import run_subagent
 from src.models.postgres.connections import ConnectionModel
 from src.repositories.connections import ConnectionRepository
 from src.repositories.profiles import ProfileRepository
@@ -26,8 +27,22 @@ async def run_for_user(session: AsyncSession, conn: ConnectionModel, *, channel:
     user = await UserRepository(session).get_user(conn.user_id)
     if user is None or not user.github_username:
         return FeedResult(0, 0, "no github identity")
-    if not await ProfileRepository(session).is_built(conn.user_id):
-        return FeedResult(0, 0, "profile not built yet")
+
+    profiles = ProfileRepository(session)
+    if not await profiles.is_built(conn.user_id):
+        # Profile is built lazily (no OAuth pre-warm). A user who linked Telegram but never
+        # chatted has no profile yet — build it here (silently) so the scheduled feed still
+        # reaches them, via the same single build path the chat agent uses.
+        await run_subagent(
+            "profile_build",
+            session=session,
+            user_id=user.id,
+            github_token=user.github_access_token,
+            github_username=user.github_username,
+            channel=None,
+        )
+        if not await profiles.is_built(conn.user_id):
+            return FeedResult(0, 0, "profile build failed")
 
     new_items, sent = await runtime.curate_feed(session, user, channel)
     await ConnectionRepository(session).mark_fed(conn)

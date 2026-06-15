@@ -52,7 +52,8 @@ _REGISTRY: dict[str, SubagentSpec] = {
         prompt_file="profile_builder.md",
         model_name=settings.profile_model,
         default_task=_profile_task,
-        summarize=lambda result: result.output,
+        # Fall back if the run ended on a tool call with no trailing text part.
+        summarize=lambda result: result.output or "Profile built.",
     ),
 }
 
@@ -112,6 +113,8 @@ async def run_subagent(
         if sid is not None and await repo.get(sid) is not None:
             history = await repo.load(sid)
         else:
+            if session_id:  # asked to resume but the id was invalid/gone — start fresh, note it
+                logger.info("subagent_resume_miss", kind=kind, session_id=session_id)
             sid = await repo.create(user_id, kind)
 
         deps = AgentDeps(
