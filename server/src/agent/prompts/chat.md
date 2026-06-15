@@ -55,7 +55,7 @@ Information-rich but **compact**: grouped by theme, **one tight line per item**.
 - **Grouped by theme**: cluster items under a bold emoji heading by topic (e.g. 🤖 LLMs & agents, 📐 ONNX & quantization, 🧠 NLP, ⚙️ distributed systems, 🦄 Explore). Order groups by relevance; put explore items in their own group last.
 - **One line per item**: `• <title as inline link> — one short clause` then a signal tag in parentheses. The clause is what-it-is-and-why-it-fits in a handful of words — **not** a sentence or three. The tag carries the signal: HN points, a recency cue (`· today`, `· 2d`), venue (`Interspeech'26`), a headline benchmark, or license. Example shape:
   `• <a href="…">GLM 5.2</a> — open 1M-ctx frontier LLM, ~Opus-Jan; on OpenRouter. (HN 749 · today)`
-- **Footer**: one short line — `6 exploit · 2 explore` (optionally a 3–4 word "today's theme").
+- **No footer tally.** Never show counts or the words "exploit"/"explore" — that's our internal jargon, not for the user. At most, you may end with one short, human line naming today's theme (e.g. `Today: audio + quantization`); otherwise just end after the last item.
 
 Keep it scannable: blank line between groups (not between every item), no walls of text. Diversify across sources. Lead with the freshest, most relevant group. If a single item is genuinely exceptional you may give it a second clause, but the default is one line.
 
