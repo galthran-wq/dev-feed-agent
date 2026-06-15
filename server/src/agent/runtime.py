@@ -67,8 +67,14 @@ async def chat(session: AsyncSession, user: UserModel, message: str, channel: Ch
 
     await msg_repo.append(user.id, result.new_messages_json())
     if deps.sent_count == 0:
-        # Interactive turn produced no message — likely the model forgot send_message.
-        logger.warning("agent_turn_no_output", user_id=str(user.id))
+        # Interactive turn sent nothing — the model answered in its output instead of calling
+        # send_message. Don't leave the user hanging: deliver that output directly.
+        fallback = (result.output or "").strip()
+        if fallback and channel is not None:
+            logger.warning("agent_turn_fallback_send", user_id=str(user.id))
+            await channel.send(fallback)
+        else:
+            logger.warning("agent_turn_no_output", user_id=str(user.id))
 
 
 async def compact(session: AsyncSession, user: UserModel) -> str:

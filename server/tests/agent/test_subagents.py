@@ -201,6 +201,42 @@ def test_prime_history_refreshes_system_prompt() -> None:
     assert user_parts == ["hi"]
 
 
+async def test_chat_delivers_output_when_model_forgets_send_message(
+    db_session: AsyncSession, test_user: UserModel, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The model answered in its output instead of calling send_message — the user must still
+    # get the answer (the bug behind a silent no-reply).
+    from src.agent import runtime
+    from src.agent.channels.base import CollectingChannel
+    from src.core import config
+
+    class _Result:
+        output = "Yes — UniFace is competitive for detection."
+
+        def new_messages_json(self) -> bytes:
+            return b"[]"
+
+    class _Agent:
+        async def __aenter__(self) -> "_Agent":
+            return self
+
+        async def __aexit__(self, *exc: object) -> None:
+            return None
+
+        async def run(self, message: str, message_history: object = None, deps: object = None) -> _Result:
+            return _Result()  # never touches deps.sent_count → stays 0
+
+    async def fake_make() -> _Agent:
+        return _Agent()
+
+    monkeypatch.setattr(config.settings, "openrouter_api_key", "k")  # agent_enabled
+    monkeypatch.setattr(runtime.agents, "make_chat_agent", fake_make)
+
+    ch = CollectingChannel()
+    await runtime.chat(db_session, test_user, "is it better than insightface?", ch)
+    assert ch.messages == ["Yes — UniFace is competitive for detection."]
+
+
 async def test_primed_history_delivers_current_prompt_to_model() -> None:
     # Load-bearing: the model must actually RECEIVE the current system prompt (pydantic-ai merges
     # the leading system-only request with the next request). Guards against a pydantic-ai bump.

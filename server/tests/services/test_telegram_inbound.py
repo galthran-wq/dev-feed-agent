@@ -52,3 +52,30 @@ async def test_linked_chat_reaches_process_incoming(
 
     await tg.handle_update("5", "any rust news?")
     assert seen == {"user_id": test_user.id, "text": "any rust news?"}
+
+
+def test_with_quote_prepends_referent() -> None:
+    out = tg._with_quote("is it better?", "UniFace — face analysis")
+    assert "UniFace — face analysis" in out and out.endswith("is it better?")
+    # commands and no-quote pass through untouched
+    assert tg._with_quote("/reset", "something") == "/reset"
+    assert tg._with_quote("hi", None) == "hi"
+
+
+async def test_quote_context_reaches_process_incoming(
+    _wire: CollectingChannel, db_session: AsyncSession, test_user: UserModel, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = ConnectionRepository(db_session)
+    conn = await repo.get_or_create(test_user.id)
+    await repo.link_telegram(conn.telegram_link_code, "5")
+
+    seen: dict = {}
+
+    async def fake_process(channel: object, session: AsyncSession, user: UserModel, text: str) -> None:
+        seen["text"] = text
+
+    monkeypatch.setattr(tg, "process_incoming", fake_process)
+
+    await tg.handle_update("5", "is it better than insightface?", "UniFace — unified face analysis")
+    assert "UniFace — unified face analysis" in seen["text"]
+    assert seen["text"].endswith("is it better than insightface?")
