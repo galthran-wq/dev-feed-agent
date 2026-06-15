@@ -58,6 +58,12 @@ def test_to_telegram_html_leaves_existing_html_untouched() -> None:
     assert _to_telegram_html(digest) == digest
 
 
+def test_to_telegram_html_does_not_mistake_comparisons_for_tags() -> None:
+    # Dev chat with bare "<" (no closing ">") must still be escaped + markdown-converted,
+    # not mistaken for HTML and passed through raw.
+    assert _to_telegram_html("if a<b and b<c then **bold**") == "if a&lt;b and b&lt;c then <b>bold</b>"
+
+
 def test_channel_format_instructions() -> None:
     # Telegram declares HTML with inline links; the HTTP/test channel declares plain text.
     assert "<a href" in tg.TelegramChannel("1").format_instructions

@@ -56,7 +56,11 @@ class GithubClient:
                     status = exc.response.status_code
                     if status in (403, 429) and attempt < 2:
                         retry_after = exc.response.headers.get("retry-after")
-                        delay = float(retry_after) if retry_after and retry_after.isdigit() else 2.0 * (attempt + 1)
+                        # Clamp: the gate is held during this sleep, so don't let a big Retry-After
+                        # (GitHub often says 60s) stall every other search behind one call.
+                        delay = min(
+                            float(retry_after) if retry_after and retry_after.isdigit() else 2.0 * (attempt + 1), 30.0
+                        )
                         logger.warning("github_search_rate_limited", status=status, delay=delay, attempt=attempt)
                         await asyncio.sleep(delay)
                         continue

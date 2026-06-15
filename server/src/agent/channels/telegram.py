@@ -37,8 +37,6 @@ _TAG_RE = re.compile(
 # Ampersands that aren't already an entity: the usual reason an unescaped URL (?a=1&b=2) makes
 # Telegram reject the whole HTML message. Fixed server-side so we don't rely on the LLM.
 _BARE_AMP_RE = re.compile(r"&(?!#?\w+;)")
-# Detect text that is already Telegram HTML (e.g. the feed digest) so we don't double-process it.
-_HTML_TAG_RE = re.compile(r"</?(?:b|strong|i|em|u|ins|s|strike|del|code|pre|blockquote|a|tg-spoiler|span)\b", re.I)
 _MD_CODE_RE = re.compile(r"`([^`\n]+)`")
 _MD_BOLD_RE = re.compile(r"\*\*([^*\n]+)\*\*")
 _MD_LINK_RE = re.compile(r"\[([^\]\n]+)\]\((https?://[^)\s]+)\)")
@@ -52,7 +50,9 @@ def _to_telegram_html(text: str) -> str:
     """The model often answers in Markdown — especially on the no-send fallback path — which
     Telegram's HTML mode renders literally (raw ``**`` and backticks). If the text isn't already
     HTML, escape it and convert the common Markdown tokens (bold, code, links) to Telegram tags."""
-    if _HTML_TAG_RE.search(text):
+    # _TAG_RE requires a real closing '>' — so a bare comparison like "a<b" isn't mistaken for a
+    # tag (which would skip escaping and re-trigger the raw-markdown bug).
+    if _TAG_RE.search(text):
         return text  # already HTML (e.g. the feed digest) — leave it
     t = html.escape(text, quote=False)  # neutralize & < > in the prose first
     t = _MD_CODE_RE.sub(lambda m: f"<code>{m.group(1)}</code>", t)

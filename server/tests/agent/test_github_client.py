@@ -30,6 +30,24 @@ async def test_search_retries_on_secondary_rate_limit(monkeypatch: pytest.Monkey
     assert len(items) == 1 and items[0]["repo_full_name"] == "a/b"
 
 
+async def test_search_raises_after_exhausting_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Persistent 403 → raise (never return None, which would crash search_issues on .get).
+    client = gc.GithubClient("tok")
+    req = httpx.Request("GET", "https://api.github.com/search/issues")
+
+    async def always_403(path: str, params: object = None) -> object:
+        resp = httpx.Response(403, headers={}, request=req)
+        raise httpx.HTTPStatusError("rate", request=req, response=resp)
+
+    async def no_sleep(_d: float) -> None:
+        return None
+
+    monkeypatch.setattr(client, "_get", always_403)
+    monkeypatch.setattr(gc.asyncio, "sleep", no_sleep)
+    with pytest.raises(httpx.HTTPStatusError):
+        await client.search_issues("q")
+
+
 async def test_search_gate_serializes_concurrent_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     # The gate must prevent concurrent GitHub search requests (GitHub forbids them per user).
     client = gc.GithubClient("tok")
