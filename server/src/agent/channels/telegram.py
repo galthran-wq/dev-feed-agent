@@ -1,6 +1,8 @@
 """Telegram output channel: shared bot, message chunking, the TelegramChannel adapter.
 Inbound updates are a separate concern — see services/telegram.py."""
 
+import html
+import re
 from functools import lru_cache
 from typing import Any
 
@@ -10,6 +12,30 @@ from src.core.config import settings
 logger = structlog.get_logger()
 
 _TELEGRAM_LIMIT = 4096
+
+# Surfaced to the agent (via deps.channel.format_instructions) so it composes messages in the
+# markup Telegram actually renders. Telegram HTML supports only a small tag set.
+_TELEGRAM_FORMAT = (
+    "This channel renders **Telegram HTML**. Format every message as HTML using ONLY these tags: "
+    "<b>bold</b>, <i>italic</i>, <u>underline</u>, <s>strikethrough</s>, <code>inline code</code>, "
+    "<pre>code block</pre>, <blockquote>quote</blockquote>, and inline links "
+    '<a href="https://...">anchor text</a>.\n'
+    "- Embed every link INLINE as an <a> with descriptive anchor text (usually the item's name or "
+    "title) — never paste a bare URL on its own line.\n"
+    "- Use <b> for section/category headings and for item titles.\n"
+    "- Do NOT use Markdown (*, _, #, backticks, [text](url)), tables, or any tag not listed above.\n"
+    "- Escape the characters & < > as &amp; &lt; &gt; in visible text and inside href URLs "
+    "(e.g. https://x.com/a?b=1&amp;c=2); leave your real tags unescaped.\n"
+    "- Emojis are welcome for visual structure."
+)
+
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _strip_tags(text: str) -> str:
+    """Plain-text fallback: drop tags and decode entities so a parse failure still delivers
+    readable text instead of raw <a href=…> markup."""
+    return html.unescape(_TAG_RE.sub("", text))
 
 
 @lru_cache(maxsize=1)
@@ -46,14 +72,21 @@ def _chunks(text: str, limit: int = _TELEGRAM_LIMIT) -> list[str]:
 
 
 class TelegramChannel:
-    # Plain text, never Markdown — arbitrary feed content would choke Telegram's parser.
+    format_instructions = _TELEGRAM_FORMAT
+
     def __init__(self, chat_id: str) -> None:
         self.chat_id = chat_id
 
     async def send(self, text: str) -> None:
         bot = get_bot()
         for chunk in _chunks(text):
-            await bot.send_message(self.chat_id, chunk, disable_web_page_preview=True)
+            try:
+                await bot.send_message(self.chat_id, chunk, parse_mode="HTML", disable_web_page_preview=True)
+            except Exception as exc:
+                # Malformed HTML (e.g. an unescaped & in a URL, or a tag split across chunks) makes
+                # Telegram reject the whole message. Never lose the content: resend it tag-stripped.
+                logger.warning("telegram_html_send_failed", chat_id=self.chat_id, error=str(exc))
+                await bot.send_message(self.chat_id, _strip_tags(chunk), disable_web_page_preview=True)
 
 
 async def setup_webhook() -> None:
