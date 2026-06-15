@@ -237,6 +237,41 @@ async def test_chat_delivers_output_when_model_forgets_send_message(
     assert ch.messages == ["Yes — UniFace is competitive for detection."]
 
 
+async def test_chat_no_send_and_empty_output_stays_silent(
+    db_session: AsyncSession, test_user: UserModel, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # No send_message AND empty output → don't deliver a blank message; just log no_output.
+    from src.agent import runtime
+    from src.agent.channels.base import CollectingChannel
+    from src.core import config
+
+    class _Result:
+        output = "   "  # whitespace only
+
+        def new_messages_json(self) -> bytes:
+            return b"[]"
+
+    class _Agent:
+        async def __aenter__(self) -> "_Agent":
+            return self
+
+        async def __aexit__(self, *exc: object) -> None:
+            return None
+
+        async def run(self, message: str, message_history: object = None, deps: object = None) -> _Result:
+            return _Result()
+
+    async def fake_make() -> _Agent:
+        return _Agent()
+
+    monkeypatch.setattr(config.settings, "openrouter_api_key", "k")
+    monkeypatch.setattr(runtime.agents, "make_chat_agent", fake_make)
+
+    ch = CollectingChannel()
+    await runtime.chat(db_session, test_user, "hi", ch)
+    assert ch.messages == []  # nothing blank sent
+
+
 async def test_primed_history_delivers_current_prompt_to_model() -> None:
     # Load-bearing: the model must actually RECEIVE the current system prompt (pydantic-ai merges
     # the leading system-only request with the next request). Guards against a pydantic-ai bump.

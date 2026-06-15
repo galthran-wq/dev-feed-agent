@@ -67,3 +67,21 @@ async def test_forwards_quote_context(client: AsyncClient, monkeypatch: pytest.M
     await client.post("/api/telegram/webhook", json=payload, headers={_HDR: _SECRET})
     await asyncio.sleep(0.05)
     assert seen["args"] == ("5", "is it better than insightface?", "UniFace — unified face analysis")
+
+
+async def test_reply_to_used_when_no_quote(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict = {}
+
+    async def fake_handle(chat_id: str, text: str, quoted: str | None = None) -> None:
+        seen["quoted"] = quoted
+
+    monkeypatch.setattr(tg_ep, "handle_update", fake_handle)
+
+    # No explicit quote fragment → fall back to the replied-to message's text.
+    payload = {
+        "update_id": 100,
+        "message": {"chat": {"id": 5}, "text": "and this one?", "reply_to_message": {"text": "older item"}},
+    }
+    await client.post("/api/telegram/webhook", json=payload, headers={_HDR: _SECRET})
+    await asyncio.sleep(0.05)
+    assert seen["quoted"] == "older item"
