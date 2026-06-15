@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     # --- LLM agent (pydantic-ai via OpenRouter) ---
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    agent_model: str = "anthropic/claude-sonnet-4.6"
+    agent_model: str = "deepseek/deepseek-v4-pro"
     # Optional heavier model for the /init profile-builder; falls back to agent_model.
     profile_builder_model: str = ""
 
