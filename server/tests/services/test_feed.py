@@ -20,9 +20,10 @@ async def test_unbuilt_profile_is_built_lazily_then_curated(
 ) -> None:
     calls: dict = {}
 
-    async def fake_build(kind: str, *, session: AsyncSession, user_id: object, **_: object) -> tuple[str, str]:
+    async def fake_build(kind: str, *, user_id: object, **_: object) -> tuple[str, str]:
         calls["built"] = kind
-        await ProfileRepository(session).mark_built(user_id)  # simulate a successful build
+        # run_subagent owns its own session; simulate the committed build on the test session.
+        await ProfileRepository(db_session).mark_built(user_id)
         return "ok", "sid-1"
 
     async def fake_curate(session: AsyncSession, user: UserModel, channel: object = None) -> tuple[int, int]:

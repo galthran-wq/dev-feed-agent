@@ -81,15 +81,17 @@ async def curate_feed(session: AsyncSession, user: UserModel, channel: Channel |
     explore_n = round(settings.feed_size * settings.explore_ratio)
     exploit_n = max(settings.feed_size - explore_n, 0)
     prompt = (
-        "It's time to assemble this user's scheduled feed.\n\n"
+        "It's time to assemble this user's scheduled feed. Follow the \"assemble the feed\" turn: "
+        "fan out to feed_gather sub-agents, then reduce.\n\n"
         f"Their interest profile:\n{profile_md}\n\n"
-        "Gather fresh, relevant items across your sources (GitHub issues/repos, HuggingFace, "
-        "Hacker News, arXiv, Reddit). Aim for about "
+        "Spawn several feed_gather sub-agents in parallel (one step), each with a focused task "
+        "across your sources (GitHub issues/repos, HuggingFace, Hacker News, arXiv, Reddit) — "
+        "split a source into multiple angles when their interests are broad. Consolidate the "
+        "candidates they return, drop anything already shown, and pick a balanced set of about "
         f"{exploit_n} 'exploit' items (squarely their interests) and {explore_n} 'explore' items "
-        "(adjacent new horizons). First check what was already shown and skip it. Record everything "
-        "you decide to surface with record_feed_items, then send the user a concise, friendly "
-        "plain-text digest of those items with links via send_message. If nothing new is worth "
-        "sending, record nothing and send NOTHING (do not message the user)."
+        "(adjacent new horizons). Record your final picks with record_feed_items, then send the "
+        "user a concise, friendly plain-text digest of those items with links via send_message. "
+        "If nothing new is worth sending, record nothing and send NOTHING (do not message the user)."
     )
 
     msg_repo = AgentMessageRepository(session)

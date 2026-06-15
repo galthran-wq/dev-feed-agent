@@ -35,11 +35,9 @@ async def run_for_user(session: AsyncSession, conn: ConnectionModel, *, channel:
         # reaches them, via the same single build path the chat agent uses.
         await run_subagent(
             "profile_build",
-            session=session,
             user_id=user.id,
             github_token=user.github_access_token,
             github_username=user.github_username,
-            channel=None,
         )
         if not await profiles.is_built(conn.user_id):
             return FeedResult(0, 0, "profile build failed")
