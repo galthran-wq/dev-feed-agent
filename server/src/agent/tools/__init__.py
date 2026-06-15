@@ -11,12 +11,13 @@ from src.agent.tools.feed_tools import FEED_TOOLS
 from src.agent.tools.github_tools import GITHUB_TOOLS
 from src.agent.tools.memory_tools import MEMORY_TOOLS
 from src.agent.tools.messaging_tools import MESSAGING_TOOLS
+from src.agent.tools.subagent_tools import SUBAGENT_TOOLS
 
 # Typed as list[Any] because pydantic-ai accepts heterogeneous tool callables; mypy
 # otherwise joins the distinct async-function types down to `function`.
-# Both agents get send_message: the chat agent answers/delivers the feed with it, and the
-# profile agent uses it to tell the user the profile is ready.
-PROFILE_TOOLS: list[Any] = [*GITHUB_TOOLS, *MEMORY_TOOLS, *MESSAGING_TOOLS]
-CHAT_TOOLS: list[Any] = [*GITHUB_TOOLS, *FEED_TOOLS, *MEMORY_TOOLS, *MESSAGING_TOOLS]
+# BASE_TOOLS: every agent, main or sub. MAIN_TOOLS = BASE + the spawn tool. Sub-agents get
+# BASE_TOOLS only — withholding spawn_subagent is the structural anti-recursion guarantee.
+BASE_TOOLS: list[Any] = [*GITHUB_TOOLS, *FEED_TOOLS, *MEMORY_TOOLS, *MESSAGING_TOOLS]
+MAIN_TOOLS: list[Any] = [*BASE_TOOLS, *SUBAGENT_TOOLS]
 
-__all__ = ["CHAT_TOOLS", "FEED_TOOLS", "GITHUB_TOOLS", "MEMORY_TOOLS", "MESSAGING_TOOLS", "PROFILE_TOOLS"]
+__all__ = ["BASE_TOOLS", "FEED_TOOLS", "GITHUB_TOOLS", "MAIN_TOOLS", "MEMORY_TOOLS", "MESSAGING_TOOLS"]

@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     agent_model: str = "deepseek/deepseek-v4-pro"
-    # Optional heavier model for the /init profile-builder; falls back to agent_model.
+    # Optional heavier model for the profile_build sub-agent; falls back to agent_model.
     profile_builder_model: str = ""
 
     # --- Telegram bot (delivery + interactive chat) ---

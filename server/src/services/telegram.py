@@ -75,7 +75,7 @@ async def _handle_start(channel: TelegramChannel, chat_id: str, code: str) -> No
         await channel.send(
             "✅ Linked! I'll send your feed here.\n"
             "Chat with me anytime to steer it.\n"
-            "Commands: /init rebuild profile · /compact summarize our chat · /reset clear it"
+            "Commands: /compact summarize our chat · /reset clear it"
         )
 
 
