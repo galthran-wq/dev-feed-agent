@@ -1,6 +1,8 @@
 """Telegram output channel: shared bot, message chunking, the TelegramChannel adapter.
 Inbound updates are a separate concern — see services/telegram.py."""
 
+import html
+import re
 from functools import lru_cache
 from typing import Any
 
@@ -10,6 +12,41 @@ from src.core.config import settings
 logger = structlog.get_logger()
 
 _TELEGRAM_LIMIT = 4096
+
+# Surfaced to the agent (via deps.channel.format_instructions) so it composes messages in the
+# markup Telegram actually renders. Telegram HTML supports only a small tag set.
+_TELEGRAM_FORMAT = (
+    "This channel renders **Telegram HTML**. Format every message as HTML using ONLY these tags: "
+    "<b>bold</b>, <i>italic</i>, <u>underline</u>, <s>strikethrough</s>, <code>inline code</code>, "
+    "<pre>code block</pre>, <blockquote>quote</blockquote>, and inline links "
+    '<a href="https://...">anchor text</a>.\n'
+    "- Embed every link INLINE as an <a> with descriptive anchor text (usually the item's name or "
+    "title) — never paste a bare URL on its own line.\n"
+    "- Use <b> for section/category headings and for item titles.\n"
+    "- Do NOT use Markdown (*, _, #, backticks, [text](url)), tables, or any tag not listed above.\n"
+    "- Escape a literal < or > in visible text as &lt; / &gt; (e.g. writing 'a &lt; b'). You do "
+    "NOT need to escape & in URLs — that's handled for you. Leave your real tags unescaped.\n"
+    "- Emojis are welcome for visual structure."
+)
+
+# Only Telegram's own tags — so the plain-text fallback strips formatting without eating a
+# literal '<' in text (e.g. "if x<3"), which is itself a common cause of the parse failure.
+_TAG_RE = re.compile(
+    r"</?(?:b|strong|i|em|u|ins|s|strike|del|code|pre|blockquote|a|tg-spoiler|span)(?:\s[^>]*)?>", re.IGNORECASE
+)
+# Ampersands that aren't already an entity: the usual reason an unescaped URL (?a=1&b=2) makes
+# Telegram reject the whole HTML message. Fixed server-side so we don't rely on the LLM.
+_BARE_AMP_RE = re.compile(r"&(?!#?\w+;)")
+
+
+def _fix_bare_amps(text: str) -> str:
+    return _BARE_AMP_RE.sub("&amp;", text)
+
+
+def _strip_tags(text: str) -> str:
+    """Plain-text fallback: drop Telegram tags and decode entities so a parse failure still
+    delivers readable text instead of raw <a href=…> markup."""
+    return html.unescape(_TAG_RE.sub("", text))
 
 
 @lru_cache(maxsize=1)
@@ -46,14 +83,27 @@ def _chunks(text: str, limit: int = _TELEGRAM_LIMIT) -> list[str]:
 
 
 class TelegramChannel:
-    # Plain text, never Markdown — arbitrary feed content would choke Telegram's parser.
+    format_instructions = _TELEGRAM_FORMAT
+
     def __init__(self, chat_id: str) -> None:
         self.chat_id = chat_id
 
     async def send(self, text: str) -> None:
+        from aiogram.exceptions import TelegramBadRequest  # lazy: keep aiogram out of import time
+
         bot = get_bot()
         for chunk in _chunks(text):
-            await bot.send_message(self.chat_id, chunk, disable_web_page_preview=True)
+            try:
+                await bot.send_message(
+                    self.chat_id, _fix_bare_amps(chunk), parse_mode="HTML", disable_web_page_preview=True
+                )
+            except TelegramBadRequest as exc:
+                # A 400 means the HTML was malformed (a stray <, a tag split across chunks) and the
+                # message was NOT delivered — so here, and only here, resend it tag-stripped so the
+                # content isn't lost. Network/flood errors propagate to upstream containment; retrying
+                # them could double-send a message Telegram may already have delivered.
+                logger.warning("telegram_html_send_failed", chat_id=self.chat_id, error=str(exc))
+                await bot.send_message(self.chat_id, _strip_tags(chunk), disable_web_page_preview=True)
 
 
 async def setup_webhook() -> None:

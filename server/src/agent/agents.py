@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from src.agent.deps import AgentDeps
@@ -65,7 +65,7 @@ def make_summarizer_agent() -> Agent[None, str]:
 
 async def make_chat_agent() -> Agent[AgentDeps, str]:
     """Wires in only reachable MCP sources so a dead one is skipped, not fatal to the run."""
-    return Agent(
+    agent = Agent(
         _model(settings.agent_model),
         deps_type=AgentDeps,
         # Date note FIRST so it's at the very top of the system prompt — most salient, least
@@ -74,3 +74,11 @@ async def make_chat_agent() -> Agent[AgentDeps, str]:
         tools=MAIN_TOOLS,
         toolsets=await reachable_mcp_servers(),
     )
+
+    @agent.system_prompt
+    def _channel_format(ctx: RunContext[AgentDeps]) -> str:
+        # The channel decides the markup; tell the agent how to format for wherever it delivers.
+        channel = ctx.deps.channel
+        return f"## Formatting for this channel\n\n{channel.format_instructions}" if channel else ""
+
+    return agent
