@@ -20,7 +20,12 @@ class ProfileRepository:
         self.session = session
 
     async def get_by_user_id(self, user_id: UUID) -> ProfileModel | None:
-        result = await self.session.execute(select(ProfileModel).where(ProfileModel.user_id == user_id))
+        # populate_existing: a profile can be (re)built by a sub-agent on a *different* session,
+        # so always refresh from the DB rather than returning a stale identity-map copy. Safe
+        # because profile writes (set_section) commit immediately — no pending in-session edits.
+        result = await self.session.execute(
+            select(ProfileModel).where(ProfileModel.user_id == user_id).execution_options(populate_existing=True)
+        )
         return result.scalar_one_or_none()
 
     async def get_or_create(self, user_id: UUID) -> ProfileModel:

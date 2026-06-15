@@ -25,10 +25,30 @@ const scenarios: Scenario[] = [
         time: '09:00',
         head: '🗞 Today’s picks — 4 fresh for you',
         items: [
-          { icon: '🦀', title: 'tokio-rs/axum', href: 'https://github.com/tokio-rs/axum', why: 'v0.8 — the ergonomic extractors you kept hitting' },
-          { icon: '🌱', title: 'good first issue · ratatui', href: 'https://github.com/ratatui/ratatui', why: '“table row selection” · Rust, beginner-friendly' },
-          { icon: '📄', title: 'arXiv', href: 'https://arxiv.org/list/cs.IR/recent', why: 'KV-cache compression for long-context LLMs · your retrieval focus' },
-          { icon: '💬', title: 'HN', href: 'https://news.ycombinator.com', why: '“Show HN: a local-first sync engine” · 412 pts' },
+          {
+            icon: '🦀',
+            title: 'tokio-rs/axum',
+            href: 'https://github.com/tokio-rs/axum',
+            why: 'v0.8 — the ergonomic extractors you kept hitting',
+          },
+          {
+            icon: '🌱',
+            title: 'good first issue · ratatui',
+            href: 'https://github.com/ratatui/ratatui',
+            why: '“table row selection” · Rust, beginner-friendly',
+          },
+          {
+            icon: '📄',
+            title: 'arXiv',
+            href: 'https://arxiv.org/list/cs.IR/recent',
+            why: 'KV-cache compression for long-context LLMs · your retrieval focus',
+          },
+          {
+            icon: '💬',
+            title: 'HN',
+            href: 'https://news.ycombinator.com',
+            why: '“Show HN: a local-first sync engine” · 412 pts',
+          },
         ],
       },
     ],
@@ -38,7 +58,12 @@ const scenarios: Scenario[] = [
     sub: 'just tell it',
     messages: [
       { role: 'user', time: '09:02', text: 'more rust, less frontend' },
-      { role: 'agent', time: '09:02', typing: true, text: 'Got it 👍 leaning into Rust & systems, easing off JS/frontend. Profile updated.' },
+      {
+        role: 'agent',
+        time: '09:02',
+        typing: true,
+        text: 'Got it 👍 leaning into Rust & systems, easing off JS/frontend. Profile updated.',
+      },
     ],
   },
   {
@@ -46,7 +71,11 @@ const scenarios: Scenario[] = [
     sub: 'on /init',
     messages: [
       { role: 'user', text: '/init' },
-      { role: 'agent', typing: true, text: 'Scanned 23 repos + their dependencies. You’re into Rust async, LLM retrieval and terminal UIs — I’ll tune your feed to that. Profile ready ✅' },
+      {
+        role: 'agent',
+        typing: true,
+        text: 'Scanned 23 repos + their dependencies. You’re into Rust async, LLM retrieval and terminal UIs — I’ll tune your feed to that. Profile ready ✅',
+      },
     ],
   },
   {
@@ -54,7 +83,11 @@ const scenarios: Scenario[] = [
     sub: 'on demand',
     messages: [
       { role: 'user', text: 'summarise that KV-cache paper' },
-      { role: 'agent', typing: true, text: 'It prunes low-attention tokens to shrink the KV cache ~4× with <1% quality drop on long-context evals — slots right into your retrieval stack. Link + 3-bullet TL;DR below 👇' },
+      {
+        role: 'agent',
+        typing: true,
+        text: 'It prunes low-attention tokens to shrink the KV cache ~4× with <1% quality drop on long-context evals — slots right into your retrieval stack. Link + 3-bullet TL;DR below 👇',
+      },
     ],
   },
 ]
@@ -107,7 +140,9 @@ function nudge(dir: number) {
                 <circle cx="12" cy="4" r="1.6" fill="#7c3aed" />
               </svg>
             </span>
-            <span class="who"><strong>devfeed.fyi</strong><em>{{ s.sub }}</em></span>
+            <span class="who"
+              ><strong>devfeed.fyi</strong><em>{{ s.sub }}</em></span
+            >
             <span class="dot" aria-hidden="true"></span>
           </header>
 
@@ -267,8 +302,7 @@ function nudge(dir: number) {
   min-height: 12.5rem;
   background:
     radial-gradient(120% 80% at 100% 0%, rgba(124, 58, 237, 0.06), transparent 60%),
-    radial-gradient(120% 80% at 0% 100%, rgba(37, 99, 235, 0.06), transparent 55%),
-    #f7f8fb;
+    radial-gradient(120% 80% at 0% 100%, rgba(37, 99, 235, 0.06), transparent 55%), #f7f8fb;
   text-align: left;
 }
 .msg {

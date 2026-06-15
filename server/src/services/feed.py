@@ -35,12 +35,13 @@ async def run_for_user(session: AsyncSession, conn: ConnectionModel, *, channel:
         # reaches them, via the same single build path the chat agent uses.
         await run_subagent(
             "profile_build",
-            session=session,
             user_id=user.id,
             github_token=user.github_access_token,
             github_username=user.github_username,
-            channel=None,
         )
+        # The sub-agent committed on its own session; the re-check (and curate_feed's profile
+        # read) must reflect that, not a stale identity-map copy — ProfileRepository reads use
+        # populate_existing for exactly this cross-session case.
         if not await profiles.is_built(conn.user_id):
             return FeedResult(0, 0, "profile build failed")
 

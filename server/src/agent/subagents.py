@@ -1,14 +1,15 @@
 """Sub-agent spawn primitive: the fan-in/fan-out framework's core.
 
 The main agent delegates heavy/multi-step work via the single ``spawn_subagent`` tool, which
-calls ``run_subagent`` here. A sub-agent runs its own (resumable) conversation in its own
-``subagent_sessions`` row; only a short result string returns to the main agent — its full
-trace never enters the main agent's history (context economy). Each ``kind`` differs only by a
-system prompt + small post-step; the toolset is shared (BASE_TOOLS, minus spawn_subagent)."""
+calls ``run_subagent`` here. Each sub-agent runs its own (resumable) conversation in its own
+``subagent_sessions`` row and **its own DB session** — so parallel sub-agents are safe by
+construction and never share the caller's session. Only a short result string returns to the
+main agent; the full trace never enters the main agent's history (context economy). Sub-agents
+have no ``send_message`` tool — they report back and the main agent decides what to tell the
+user. Each ``kind`` differs only by a system prompt + small post-step."""
 
 import asyncio
-from collections.abc import AsyncIterator, Callable
-from contextlib import asynccontextmanager
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -17,7 +18,6 @@ import structlog
 from pydantic_ai import AgentRunResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.agent import agents
-from src.agent.channels import Channel
 from src.agent.deps import AgentDeps
 from src.core.config import settings
 from src.core.database import AsyncSessionLocal
@@ -47,6 +47,15 @@ def _profile_task(github_username: str | None) -> str:
     )
 
 
+def _gather_task(github_username: str | None) -> str:
+    # Used only if the main agent spawns feed_gather with no task; it normally passes a focused one.
+    return (
+        "Gather a handful of fresh, relevant feed candidates for this user across the sources "
+        "available to you. Read their profile and recently-shown list first, then report the "
+        "candidates as a compact list."
+    )
+
+
 _REGISTRY: dict[str, SubagentSpec] = {
     "profile_build": SubagentSpec(
         prompt_file="profile_builder.md",
@@ -54,6 +63,12 @@ _REGISTRY: dict[str, SubagentSpec] = {
         default_task=_profile_task,
         # Fall back if the run ended on a tool call with no trailing text part.
         summarize=lambda result: result.output or "Profile built.",
+    ),
+    "feed_gather": SubagentSpec(
+        prompt_file="feed_gather.md",
+        model_name=settings.agent_model,
+        default_task=_gather_task,
+        summarize=lambda result: result.output or "(no candidates found)",
     ),
 }
 
@@ -63,45 +78,27 @@ async def _post_step(kind: str, session: AsyncSession, user_id: UUID) -> None:
         await ProfileRepository(session).mark_built(user_id)
 
 
-@asynccontextmanager
-async def _run_session(
-    own_session: bool, session: AsyncSession, parent_db_lock: asyncio.Lock | None
-) -> AsyncIterator[tuple[AsyncSession, asyncio.Lock]]:
-    """Yield the (session, lock) the sub-agent runs on. Nested (default): the caller's session
-    + its lock (asyncio.Lock isn't reentrant, so the spawning tool must not hold it). With
-    ``own_session`` (reserved for the later feed fan-out): a fresh session + fresh lock so
-    parallel siblings don't share one non-concurrency-safe session."""
-    if own_session:
-        async with AsyncSessionLocal() as sub_session:
-            yield sub_session, asyncio.Lock()
-    else:
-        yield session, parent_db_lock if parent_db_lock is not None else asyncio.Lock()
-
-
 async def run_subagent(
     kind: str,
     *,
-    session: AsyncSession,
     user_id: UUID,
     github_token: str | None,
     github_username: str | None,
-    channel: Channel | None,
     task: str | None = None,
     session_id: str | None = None,
-    parent_db_lock: asyncio.Lock | None = None,
-    own_session: bool = False,
 ) -> tuple[str, str]:
     """Run (or resume) a ``kind`` sub-agent; return ``(concise_result, session_id)``.
 
-    Resume when ``session_id`` names an existing row, else mint a new session. Persists the
-    full trace and never raises — failures come back as a string so the main agent can still
-    reply."""
+    Always runs on its **own** ``AsyncSessionLocal`` + lock, so callers (including N parallel
+    spawns) never share a session. Resume when ``session_id`` names an existing row, else mint a
+    new session. Persists the full trace and never raises — failures come back as a string so the
+    main agent can still reply."""
     spec = _REGISTRY.get(kind)
     if spec is None:
         return f"[no such sub-agent kind '{kind}']", session_id or ""
 
-    async with _run_session(own_session, session, parent_db_lock) as (sess, lock):
-        repo = SubagentSessionRepository(sess)
+    async with AsyncSessionLocal() as session:
+        repo = SubagentSessionRepository(session)
 
         sid: UUID | None = None
         if session_id:
@@ -118,12 +115,12 @@ async def run_subagent(
             sid = await repo.create(user_id, kind)
 
         deps = AgentDeps(
-            session=sess,
+            session=session,
             user_id=user_id,
             github_token=github_token,
             github_username=github_username,
-            channel=channel,
-            db_lock=lock,
+            channel=None,  # sub-agents don't talk to the user; the main agent relays their result
+            db_lock=asyncio.Lock(),
         )
 
         try:
@@ -131,7 +128,7 @@ async def run_subagent(
             async with agent:
                 result = await agent.run(task or spec.default_task(github_username), message_history=history, deps=deps)
             await repo.save(sid, result.all_messages_json())
-            await _post_step(kind, sess, user_id)
+            await _post_step(kind, session, user_id)
             logger.info("subagent_done", kind=kind, session_id=str(sid), user_id=str(user_id))
             return spec.summarize(result), str(sid)
         except Exception as exc:

@@ -22,7 +22,7 @@ Persist your findings by calling `update_profile_section` once per section. Fill
 
 Be concrete and honest. If a signal is weak, say so. Do not invent interests you have no evidence for.
 
-When you have filled in the sections, tell the user their profile is ready by calling `send_message` once — a short, friendly note (1–2 sentences) on what you learned about them and that you'll start tailoring their feed. That message is the only thing the user sees from this run, so don't skip it.
+When you have filled in the sections, end your turn with a 1–2 sentence summary of what you learned about this developer — that summary is your return value to the orchestrating agent (you do not message the user yourself).
 
 ## Untrusted external data — IMPORTANT
 
