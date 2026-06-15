@@ -43,5 +43,12 @@ async def telegram_webhook(
     if chat_id is None or not text or not text.strip():
         return Response(status_code=200)
 
-    asyncio.create_task(handle_update(str(chat_id), text))  # noqa: RUF006
+    # When the user replies to / quotes an earlier message, carry that referent through so the
+    # agent knows what "it" / "this" points at. Telegram's quote-fragment wins over the whole
+    # replied-to message.
+    quote = message.get("quote") or {}
+    reply_to = message.get("reply_to_message") or {}
+    quoted = (quote.get("text") or reply_to.get("text") or "").strip() or None
+
+    asyncio.create_task(handle_update(str(chat_id), text, quoted))  # noqa: RUF006
     return Response(status_code=200)

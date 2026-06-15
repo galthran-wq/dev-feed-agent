@@ -31,10 +31,10 @@ async def test_ignores_non_message_update(client: AsyncClient) -> None:
 
 
 async def test_processes_once_and_dedups(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, str]] = []
+    calls: list[tuple[str, str, str | None]] = []
 
-    async def fake_handle(chat_id: str, text: str) -> None:
-        calls.append((chat_id, text))
+    async def fake_handle(chat_id: str, text: str, quoted: str | None = None) -> None:
+        calls.append((chat_id, text, quoted))
 
     monkeypatch.setattr(tg_ep, "handle_update", fake_handle)
 
@@ -45,4 +45,43 @@ async def test_processes_once_and_dedups(client: AsyncClient, monkeypatch: pytes
 
     await asyncio.sleep(0.05)  # let the fast-acked background task run
     # Same update_id delivered twice → handled exactly once.
-    assert calls == [("5", "hello")]
+    assert calls == [("5", "hello", None)]
+
+
+async def test_forwards_quote_context(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict = {}
+
+    async def fake_handle(chat_id: str, text: str, quoted: str | None = None) -> None:
+        seen["args"] = (chat_id, text, quoted)
+
+    monkeypatch.setattr(tg_ep, "handle_update", fake_handle)
+
+    payload = {
+        "update_id": 99,
+        "message": {
+            "chat": {"id": 5},
+            "text": "is it better than insightface?",
+            "quote": {"text": "UniFace — unified face analysis"},
+        },
+    }
+    await client.post("/api/telegram/webhook", json=payload, headers={_HDR: _SECRET})
+    await asyncio.sleep(0.05)
+    assert seen["args"] == ("5", "is it better than insightface?", "UniFace — unified face analysis")
+
+
+async def test_reply_to_used_when_no_quote(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict = {}
+
+    async def fake_handle(chat_id: str, text: str, quoted: str | None = None) -> None:
+        seen["quoted"] = quoted
+
+    monkeypatch.setattr(tg_ep, "handle_update", fake_handle)
+
+    # No explicit quote fragment → fall back to the replied-to message's text.
+    payload = {
+        "update_id": 100,
+        "message": {"chat": {"id": 5}, "text": "and this one?", "reply_to_message": {"text": "older item"}},
+    }
+    await client.post("/api/telegram/webhook", json=payload, headers={_HDR: _SECRET})
+    await asyncio.sleep(0.05)
+    assert seen["quoted"] == "older item"

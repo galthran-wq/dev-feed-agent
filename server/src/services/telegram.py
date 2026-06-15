@@ -79,7 +79,15 @@ async def _handle_start(channel: TelegramChannel, chat_id: str, code: str) -> No
         )
 
 
-async def handle_update(chat_id: str, text: str) -> None:
+def _with_quote(text: str, quoted: str | None) -> str:
+    """Prepend the replied-to / quoted text as context so the agent can resolve references."""
+    if not quoted or text.lstrip().startswith("/"):  # commands take no quote context
+        return text
+    snippet = quoted if len(quoted) <= 500 else quoted[:500] + "…"
+    return f'[The user is replying to this earlier message:\n"{snippet}"]\n\n{text}'
+
+
+async def handle_update(chat_id: str, text: str, quoted: str | None = None) -> None:
     # Detached from the already-acked webhook: never let an exception escape unlogged —
     # the update is marked seen and won't be retried.
     channel = TelegramChannel(chat_id)
@@ -100,7 +108,7 @@ async def handle_update(chat_id: str, text: str) -> None:
                     logger.error("telegram_chat_user_missing", chat_id=chat_id, user_id=str(conn.user_id))
                     await channel.send(GENERIC_ERROR)
                     return
-                await process_incoming(channel, session, user, text)
+                await process_incoming(channel, session, user, _with_quote(text, quoted))
     except Exception as exc:
         logger.error("telegram_update_failed", chat_id=chat_id, error=str(exc))
         try:
