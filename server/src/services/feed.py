@@ -27,9 +27,12 @@ def feed_due(conn: ConnectionModel, now: datetime) -> bool:
     """Whether this user's scheduled feed is due, per their own cadence (not a global hourly poll)."""
     if not conn.feed_enabled:
         return False
-    if conn.last_feed_at is None:
+    last = conn.last_feed_at
+    if last is None:
         return True  # never fed → due now
-    return now - conn.last_feed_at >= timedelta(minutes=conn.feed_interval_minutes)
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=UTC)  # SQLite drops tz; stored values are UTC
+    return now - last >= timedelta(minutes=conn.feed_interval_minutes)
 
 
 async def run_for_user(session: AsyncSession, conn: ConnectionModel, *, channel: Channel | None = None) -> FeedResult:

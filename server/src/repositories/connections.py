@@ -86,7 +86,8 @@ class ConnectionRepository:
         """Update the user's feed cadence and/or pause-state (the user-facing schedule control)."""
         conn = await self.get_or_create(user_id)
         if interval_minutes is not None:
-            conn.feed_interval_minutes = max(interval_minutes, 60)  # clamp out sub-hour spam
+            # Clamp: ≥1h (no sub-hour spam), ≤30d (an absurd value shouldn't silently stick).
+            conn.feed_interval_minutes = min(max(interval_minutes, 60), 43200)
         if enabled is not None:
             conn.feed_enabled = enabled
         await self.session.commit()
