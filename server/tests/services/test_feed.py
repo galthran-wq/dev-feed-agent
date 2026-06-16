@@ -1,14 +1,67 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.agent import runtime
+from src.models.postgres.connections import ConnectionModel
 from src.models.postgres.profiles import ProfileModel
 from src.models.postgres.users import UserModel
 from src.repositories.connections import ConnectionRepository
 from src.repositories.profiles import ProfileRepository
 from src.services import feed
+
+
+def test_feed_due_respects_interval_and_pause() -> None:
+    now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+    never = ConnectionModel(feed_enabled=True, feed_interval_minutes=1440, last_feed_at=None)
+    assert feed.feed_due(never, now) is True  # never fed → due
+
+    fresh = ConnectionModel(feed_enabled=True, feed_interval_minutes=1440, last_feed_at=now - timedelta(minutes=10))
+    assert feed.feed_due(fresh, now) is False  # fed 10 min ago, daily cadence → not due
+
+    stale = ConnectionModel(feed_enabled=True, feed_interval_minutes=1440, last_feed_at=now - timedelta(days=2))
+    assert feed.feed_due(stale, now) is True  # past the interval → due
+
+    paused = ConnectionModel(feed_enabled=False, feed_interval_minutes=60, last_feed_at=None)
+    assert feed.feed_due(paused, now) is False  # paused → never due
+
+    # SQLite (and any non-timestamptz read) hands back a NAIVE last_feed_at — must not raise.
+    naive_stale = ConnectionModel(feed_enabled=True, feed_interval_minutes=1440, last_feed_at=datetime(2026, 6, 14, 12))
+    assert feed.feed_due(naive_stale, now) is True  # treated as UTC, 2 days old → due
+
+
+async def test_run_for_user_skips_when_not_due(
+    feedable_conn: object, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conn: ConnectionModel = feedable_conn  # type: ignore[assignment]
+    conn.last_feed_at = datetime.now(UTC)  # just fed; default daily cadence → not due
+    await db_session.commit()
+
+    async def fake_curate(*a: object, **k: object) -> tuple[int, int]:
+        raise AssertionError("must not curate when the feed isn't due")
+
+    monkeypatch.setattr(runtime, "curate_feed", fake_curate)
+    result = await feed.run_for_user(db_session, conn)  # type: ignore[arg-type]
+    assert result.note == "not due yet"
+
+
+async def test_run_for_user_feeds_when_due_and_advances_last_feed_at(
+    feedable_conn: object, db_session: AsyncSession, test_user: UserModel, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conn: ConnectionModel = feedable_conn  # type: ignore[assignment]
+    await ProfileRepository(db_session).mark_built(test_user.id)  # so it curates, not lazy-builds
+    old = datetime.now(UTC) - timedelta(days=2)
+    conn.last_feed_at = old  # well past the daily interval → due
+    await db_session.commit()
+
+    async def fake_curate(session: AsyncSession, user: UserModel, channel: object = None) -> tuple[int, int]:
+        return 2, 1
+
+    monkeypatch.setattr(runtime, "curate_feed", fake_curate)
+    result = await feed.run_for_user(db_session, conn)  # type: ignore[arg-type]
+    assert (result.delivered, result.curated) == (1, 2)  # fed
+    assert conn.last_feed_at > old  # mark_fed advanced it → won't repeat next tick
 
 
 @pytest.fixture
