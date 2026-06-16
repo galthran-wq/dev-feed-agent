@@ -1,6 +1,8 @@
 """Per-user feed pass: curate via the agent (it delivers through its channel) → mark fed.
 ``channel=None`` curates without delivering (dry run / tests)."""
 
+from datetime import UTC, datetime, timedelta
+
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.agent import runtime
@@ -21,8 +23,20 @@ class FeedResult:
         self.note = note
 
 
+def feed_due(conn: ConnectionModel, now: datetime) -> bool:
+    """Whether this user's scheduled feed is due, per their own cadence (not a global hourly poll)."""
+    if not conn.feed_enabled:
+        return False
+    if conn.last_feed_at is None:
+        return True  # never fed → due now
+    return now - conn.last_feed_at >= timedelta(minutes=conn.feed_interval_minutes)
+
+
 async def run_for_user(session: AsyncSession, conn: ConnectionModel, *, channel: Channel | None = None) -> FeedResult:
     log = logger.bind(user_id=str(conn.user_id))
+
+    if not feed_due(conn, datetime.now(UTC)):
+        return FeedResult(0, 0, "not due yet")
 
     user = await UserRepository(session).get_user(conn.user_id)
     if user is None or not user.github_username:

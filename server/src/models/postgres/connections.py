@@ -24,6 +24,9 @@ class ConnectionModel(Base):
     telegram_link_code: Mapped[str] = mapped_column(String, unique=True, default=_link_code)
 
     feed_enabled: Mapped[bool] = mapped_column(default=True)
+    # How often the scheduled feed is delivered to this user. Default daily; the user changes it
+    # in chat via set_feed_schedule (the global scheduler tick just gates on it + last_feed_at).
+    feed_interval_minutes: Mapped[int] = mapped_column(default=1440, server_default="1440")
     last_feed_at: Mapped[datetime | None] = mapped_column(default=None)
 
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))

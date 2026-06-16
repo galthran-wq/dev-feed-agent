@@ -80,6 +80,19 @@ class ConnectionRepository:
         conn.last_feed_at = datetime.now(UTC)
         await self.session.commit()
 
+    async def set_schedule(
+        self, user_id: UUID, *, interval_minutes: int | None = None, enabled: bool | None = None
+    ) -> ConnectionModel:
+        """Update the user's feed cadence and/or pause-state (the user-facing schedule control)."""
+        conn = await self.get_or_create(user_id)
+        if interval_minutes is not None:
+            conn.feed_interval_minutes = max(interval_minutes, 60)  # clamp out sub-hour spam
+        if enabled is not None:
+            conn.feed_enabled = enabled
+        await self.session.commit()
+        await self.session.refresh(conn)
+        return conn
+
     async def list_feedable(self) -> list[ConnectionModel]:
         """Connections eligible for the scheduled feed."""
         result = await self.session.execute(
