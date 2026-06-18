@@ -6,6 +6,7 @@ Profile building is no longer a top-level entry point — it's the ``profile_bui
 kind (src/agent/subagents.py) that the chat agent spawns when it sees an empty profile."""
 
 from dataclasses import replace
+from typing import TYPE_CHECKING
 
 import structlog
 from pydantic_ai.messages import ModelMessage, ModelRequest, SystemPromptPart
@@ -13,6 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.agent import agents
 from src.agent.channels import Channel
 from src.agent.deps import AgentDeps
+
+if TYPE_CHECKING:
+    from src.agent.trace import LiveTrace
 from src.core.config import settings
 from src.core.exceptions import AppError
 from src.models.postgres.users import UserModel
@@ -43,13 +47,14 @@ def _prime_history(history: list[ModelMessage], system_text: str) -> list[ModelM
     return [ModelRequest(parts=[SystemPromptPart(content=system_text)]), *cleaned]
 
 
-def _deps(session: AsyncSession, user: UserModel, channel: Channel | None = None) -> AgentDeps:
+def _deps(session: AsyncSession, user: UserModel, channel: Channel | None, tracer: "LiveTrace | None") -> AgentDeps:
     return AgentDeps(
         session=session,
         user_id=user.id,
         github_token=user.github_access_token,
         github_username=user.github_username,
         channel=channel,
+        tracer=tracer,
     )
 
 
@@ -60,10 +65,19 @@ async def chat(session: AsyncSession, user: UserModel, message: str, channel: Ch
     history = await msg_repo.load(user.id, max_tokens=settings.agent_history_token_budget)
 
     agent = await agents.make_chat_agent()
-    deps = _deps(session, user, channel)
+    tracer = channel.begin_trace() if channel is not None else None
+    deps = _deps(session, user, channel, tracer)
     primed = _prime_history(history, agents.build_chat_system_prompt(channel))
-    async with agent:
-        result = await agent.run(message, message_history=primed, deps=deps)
+    handler = tracer.make_handler() if tracer is not None else None
+    try:
+        async with agent:
+            result = await agent.run(message, message_history=primed, deps=deps, event_stream_handler=handler)
+    except Exception:
+        if tracer is not None:  # leave the trace showing how far it got, marked failed
+            await tracer.finish(ok=False)
+        raise
+    if tracer is not None:
+        await tracer.finish(ok=True)
 
     await msg_repo.append(user.id, result.new_messages_json())
     if deps.sent_count == 0:
@@ -128,10 +142,19 @@ async def curate_feed(session: AsyncSession, user: UserModel, channel: Channel |
     history = await msg_repo.load(user.id, max_tokens=settings.agent_history_token_budget)
 
     agent = await agents.make_chat_agent()
-    deps = _deps(session, user, channel)
+    tracer = channel.begin_trace() if channel is not None else None
+    deps = _deps(session, user, channel, tracer)
     primed = _prime_history(history, agents.build_chat_system_prompt(channel))
-    async with agent:
-        result = await agent.run(prompt, message_history=primed, deps=deps)
+    handler = tracer.make_handler() if tracer is not None else None
+    try:
+        async with agent:
+            result = await agent.run(prompt, message_history=primed, deps=deps, event_stream_handler=handler)
+    except Exception:
+        if tracer is not None:
+            await tracer.finish(ok=False)
+        raise
+    if tracer is not None:
+        await tracer.finish(ok=True)
 
     await msg_repo.append(user.id, result.new_messages_json())
     new_items = len(deps.recorded)

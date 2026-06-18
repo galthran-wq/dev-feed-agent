@@ -4,10 +4,13 @@ Inbound updates are a separate concern — see services/telegram.py."""
 import html
 import re
 from functools import lru_cache
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from src.core.config import settings
+
+if TYPE_CHECKING:
+    from src.agent.trace import LiveTrace, Status
 
 logger = structlog.get_logger()
 
@@ -121,6 +124,57 @@ class TelegramChannel:
                 # them could double-send a message Telegram may already have delivered.
                 logger.warning("telegram_html_send_failed", chat_id=self.chat_id, error=str(exc))
                 await bot.send_message(self.chat_id, _strip_tags(rendered), disable_web_page_preview=True)
+
+    def begin_trace(self) -> "LiveTrace | None":
+        from src.agent.trace import LiveTrace  # lazy: trace.py pulls in pydantic-ai event types
+
+        return LiveTrace(_TelegramTraceSink(self.chat_id))
+
+
+_TRACE_HEADERS = {"running": "⚙️ <b>Working…</b>", "done": "✅ <b>Done</b>", "error": "⚠️ <b>Error</b>"}
+
+
+def _render_trace_html(steps: list[str], status: "Status") -> str:
+    header = _TRACE_HEADERS.get(status, _TRACE_HEADERS["running"])
+    if not steps:
+        return header
+    # Steps are our own labels (may carry a user's query) — escape, never trust as markup.
+    lines = "\n".join(f"• {html.escape(s, quote=False)}" for s in steps)
+    return f"{header}\n<blockquote>{lines}</blockquote>"
+
+
+class _TelegramTraceSink:
+    """Renders a LiveTrace as ONE message: the first frame sends it, every later frame edits it
+    in place. Best-effort — if the send fails we keep no id and just try again next frame."""
+
+    def __init__(self, chat_id: str) -> None:
+        self.chat_id = chat_id
+        self._message_id: int | None = None
+
+    async def render(self, steps: list[str], status: "Status") -> None:
+        from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
+
+        bot = get_bot()
+        text = _render_trace_html(steps, status)
+        if self._message_id is None:
+            msg = await bot.send_message(self.chat_id, text, parse_mode="HTML", disable_web_page_preview=True)
+            self._message_id = msg.message_id
+            return
+        try:
+            await bot.edit_message_text(
+                text,
+                chat_id=self.chat_id,
+                message_id=self._message_id,
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+        except TelegramBadRequest as exc:
+            # Identical text inside the throttle window — Telegram rejects a no-op edit; harmless.
+            if "not modified" not in str(exc).lower():
+                raise
+        except TelegramRetryAfter:
+            # Edit flood control — drop this frame; the next step (or finish) renders the latest.
+            pass
 
 
 async def setup_webhook() -> None:

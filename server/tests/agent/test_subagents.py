@@ -69,10 +69,13 @@ class _FakeAgent:
     async def __aexit__(self, *exc: object) -> None:
         return None
 
-    async def run(self, task: str, message_history: list | None = None, deps: object = None) -> _FakeResult:
+    async def run(
+        self, task: str, message_history: list | None = None, deps: object = None, event_stream_handler: object = None
+    ) -> _FakeResult:
         self._captured["task"] = task
         self._captured["history"] = message_history or []
         self._captured["deps"] = deps
+        self._captured["event_stream_handler"] = event_stream_handler
         return _FakeResult("Profile built: loves rust and retrieval.")
 
 
@@ -223,7 +226,9 @@ async def test_chat_delivers_output_when_model_forgets_send_message(
         async def __aexit__(self, *exc: object) -> None:
             return None
 
-        async def run(self, message: str, message_history: object = None, deps: object = None) -> _Result:
+        async def run(
+            self, message: str, message_history: object = None, deps: object = None, event_stream_handler: object = None
+        ) -> _Result:
             return _Result()  # never touches deps.sent_count → stays 0
 
     async def fake_make() -> _Agent:
@@ -258,7 +263,9 @@ async def test_chat_no_send_and_empty_output_stays_silent(
         async def __aexit__(self, *exc: object) -> None:
             return None
 
-        async def run(self, message: str, message_history: object = None, deps: object = None) -> _Result:
+        async def run(
+            self, message: str, message_history: object = None, deps: object = None, event_stream_handler: object = None
+        ) -> _Result:
             return _Result()
 
     async def fake_make() -> _Agent:
