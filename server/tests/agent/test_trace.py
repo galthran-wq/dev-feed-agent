@@ -31,6 +31,14 @@ async def test_steps_are_newest_first_and_capped_at_ten() -> None:
     assert "step 2" not in last_steps and "step 1" not in last_steps
 
 
+async def test_finish_without_any_steps_renders_nothing() -> None:
+    # A turn with zero tool calls must not post a lone, contentless "Done" bubble.
+    sink = _RecordingSink()
+    trace = LiveTrace(sink)
+    await trace.finish(ok=True)
+    assert sink.frames == []
+
+
 async def test_finish_failure_flushes_error_status_with_latest_steps() -> None:
     sink = _RecordingSink()
     trace = LiveTrace(sink)
@@ -95,3 +103,73 @@ async def test_handler_records_function_tool_calls_only() -> None:
 
     steps, _ = sink.frames[-1]
     assert steps == ['Searching GitHub repos: "vit"', "Reading your profile"]  # newest first, non-tool skipped
+
+
+async def test_handler_swallows_label_errors_so_a_bad_event_cant_abort_the_run() -> None:
+    # pydantic-ai aborts the run if the handler raises — a malformed event must be swallowed.
+    sink = _RecordingSink()
+    trace = LiveTrace(sink)
+    handler = trace.make_handler()
+
+    class _Boom:
+        event_kind = "function_tool_call"
+
+        @property
+        def part(self) -> object:
+            raise RuntimeError("malformed event")
+
+    async def stream() -> Any:
+        yield _Boom()
+
+    await handler(object(), stream())  # must not raise
+
+
+class _FakeMsg:
+    message_id = 555
+
+
+class _FakeBot:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+        self.edit_error: Exception | None = None
+
+    async def send_message(self, chat_id: object, text: str, **kw: object) -> _FakeMsg:
+        self.calls.append(("send", text))
+        return _FakeMsg()
+
+    async def edit_message_text(self, text: str, **kw: object) -> None:
+        self.calls.append(("edit", text))
+        if self.edit_error is not None:
+            raise self.edit_error
+
+
+async def test_telegram_sink_sends_first_frame_then_edits(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.agent.channels import telegram
+
+    bot = _FakeBot()
+    monkeypatch.setattr(telegram, "get_bot", lambda: bot)
+    sink = telegram._TelegramTraceSink("42")
+
+    await sink.render(["a"], "running")
+    await sink.render(["b", "a"], "done")
+
+    assert [c[0] for c in bot.calls] == ["send", "edit"]  # first sends, then edits in place
+    assert sink._message_id == 555
+
+
+async def test_telegram_sink_resends_after_edit_target_is_gone(monkeypatch: pytest.MonkeyPatch) -> None:
+    from aiogram.exceptions import TelegramBadRequest
+    from src.agent.channels import telegram
+
+    bot = _FakeBot()
+    monkeypatch.setattr(telegram, "get_bot", lambda: bot)
+    sink = telegram._TelegramTraceSink("42")
+
+    await sink.render(["a"], "running")  # send → id 555
+    bot.edit_error = TelegramBadRequest(method=object(), message="Bad Request: message to edit not found")
+    await sink.render(["b"], "running")  # edit fails → id dropped
+    assert sink._message_id is None
+
+    bot.edit_error = None
+    await sink.render(["c"], "running")  # recovers by sending a fresh message
+    assert [c[0] for c in bot.calls] == ["send", "edit", "send"]

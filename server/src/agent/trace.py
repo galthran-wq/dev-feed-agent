@@ -144,6 +144,10 @@ class LiveTrace:
 
     async def finish(self, ok: bool) -> None:
         async with self._lock:
+            # No tool calls happened (e.g. the model answered directly) — never opened a trace, so
+            # don't post a lone, contentless status bubble before the real reply.
+            if not self._steps:
+                return
             await self._render("done" if ok else "error")
 
     async def _render(self, status: Status) -> None:
@@ -164,12 +168,17 @@ class LiveTrace:
                 # turn the whole trace off; we only ever read .part.tool_name / .part.args.
                 if getattr(event, "event_kind", None) != "function_tool_call":
                     continue
-                part = getattr(event, "part", None)
-                name = getattr(part, "tool_name", None)
-                if not name:
-                    continue
-                label = _label_for(name, getattr(part, "args", None), prefix)
-                if label:
-                    await self.step(label)
+                try:
+                    part = getattr(event, "part", None)
+                    name = getattr(part, "tool_name", None)
+                    if not name:
+                        continue
+                    label = _label_for(name, getattr(part, "args", None), prefix)
+                    if label:
+                        await self.step(label)
+                except Exception as exc:
+                    # pydantic-ai propagates a handler exception and ABORTS the run — the trace must
+                    # never do that. Swallow per-event so a labeling bug can't kill the agent.
+                    logger.warning("trace_handler_failed", error=str(exc))
 
         return handler

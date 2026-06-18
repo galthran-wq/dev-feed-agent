@@ -170,8 +170,12 @@ class _TelegramTraceSink:
             )
         except TelegramBadRequest as exc:
             # Identical text inside the throttle window — Telegram rejects a no-op edit; harmless.
-            if "not modified" not in str(exc).lower():
-                raise
+            if "not modified" in str(exc).lower():
+                return
+            # Anything else (e.g. the user deleted the trace message) means this id is dead — drop
+            # it so the next frame re-sends a fresh one instead of failing for the rest of the run.
+            logger.warning("telegram_trace_edit_failed", chat_id=self.chat_id, error=str(exc))
+            self._message_id = None
         except TelegramRetryAfter:
             # Edit flood control — drop this frame; the next step (or finish) renders the latest.
             pass
