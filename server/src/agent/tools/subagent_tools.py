@@ -37,6 +37,7 @@ async def spawn_subagent(
         github_username=ctx.deps.github_username,
         task=task,
         session_id=session_id,
+        tracer=ctx.deps.tracer,  # share the live trace so the sub-agent's steps show in the same view
     )
     return f"sub-agent '{kind}' (session_id={sid}) returned:\n{result}"
 

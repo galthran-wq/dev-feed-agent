@@ -26,6 +26,7 @@ from src.repositories.subagent_sessions import SubagentSessionRepository
 
 if TYPE_CHECKING:
     from pydantic_ai.messages import ModelMessage
+    from src.agent.trace import LiveTrace
 
 logger = structlog.get_logger()
 
@@ -86,6 +87,7 @@ async def run_subagent(
     github_username: str | None,
     task: str | None = None,
     session_id: str | None = None,
+    tracer: "LiveTrace | None" = None,
 ) -> tuple[str, str]:
     """Run (or resume) a ``kind`` sub-agent; return ``(concise_result, session_id)``.
 
@@ -120,13 +122,21 @@ async def run_subagent(
             github_token=github_token,
             github_username=github_username,
             channel=None,  # sub-agents don't talk to the user; the main agent relays their result
+            tracer=tracer,  # but their steps DO surface in the shared live trace
             db_lock=asyncio.Lock(),
         )
 
         try:
             agent = await agents.make_subagent(spec.prompt_file, spec.model_name)
+            # Attribute this sub-agent's tool steps to its kind in the shared trace.
+            handler = tracer.make_handler(prefix=f"{kind} ▸ ") if tracer is not None else None
             async with agent:
-                result = await agent.run(task or spec.default_task(github_username), message_history=history, deps=deps)
+                result = await agent.run(
+                    task or spec.default_task(github_username),
+                    message_history=history,
+                    deps=deps,
+                    event_stream_handler=handler,
+                )
             await repo.save(sid, result.all_messages_json())
             await _post_step(kind, session, user_id)
             logger.info("subagent_done", kind=kind, session_id=str(sid), user_id=str(user_id))

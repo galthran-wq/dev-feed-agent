@@ -3,7 +3,10 @@
 Each channel also declares ``format_instructions`` — what markup it renders — which is surfaced
 to the agent so it formats messages correctly for wherever they'll be delivered."""
 
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from src.agent.trace import LiveTrace
 
 # Plain-text channels (no rich rendering): say so explicitly so the agent doesn't emit markup.
 PLAIN_TEXT_INSTRUCTIONS = (
@@ -18,6 +21,10 @@ class Channel(Protocol):
 
     async def send(self, text: str) -> None: ...
 
+    # A self-updating run trace, or None if the medium can't edit a message in place (only
+    # Telegram can). Lets the agent show live progress without each channel knowing how.
+    def begin_trace(self) -> "LiveTrace | None": ...
+
 
 class CollectingChannel:
     """Buffers sent messages in memory — for the HTTP /message response and for tests."""
@@ -29,3 +36,6 @@ class CollectingChannel:
 
     async def send(self, text: str) -> None:
         self.messages.append(text)
+
+    def begin_trace(self) -> "LiveTrace | None":
+        return None  # no in-place editing; the trace is a Telegram-only affordance
