@@ -1,7 +1,5 @@
 services:
   postgres:
-    # pgvector build of Postgres 15 — mem0's memory store needs the `vector` extension
-    # (enabled by an Alembic migration).
     image: pgvector/pgvector:pg15
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
