@@ -36,8 +36,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from src.agent.channels import remove_webhook, setup_webhook
     from src.services import scheduler
 
-    # Required config — the app is useless without the agent (OpenRouter) and its only channel
-    # (Telegram), so fail fast before starting anything we'd then have to tear down.
+    # Fail fast on missing required config, before we start anything we'd have to tear down.
     if not settings.openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is required — the agent is the whole product.")
     if not settings.telegram_bot_token or not settings.telegram_webhook_secret:
