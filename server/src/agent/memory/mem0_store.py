@@ -1,7 +1,5 @@
-"""Shared mem0 client: in-process AsyncMemory over pgvector + OpenRouter. Rides on the agent —
-get_mem0() returns None only when the agent itself is off (no OpenRouter key). Cloud later:
-callers only use .add()/.search(), which AsyncMemory (OSS) and AsyncMemoryClient (hosted) share,
-so this factory just grows a branch."""
+"""Shared mem0 client: in-process AsyncMemory over pgvector + OpenRouter. get_mem0() returns
+None when the agent is off (no OpenRouter key)."""
 
 from typing import TYPE_CHECKING, Any
 
@@ -55,7 +53,7 @@ def get_mem0() -> "AsyncMemory | None":
     if not settings.agent_enabled:
         return None
     if _mem is None:
-        from mem0 import AsyncMemory  # lazy: keep mem0 out of import time when disabled
+        from mem0 import AsyncMemory  # lazy: mem0 is heavy, import only when first used
 
         _mem = AsyncMemory.from_config(_config())
         logger.info("mem0_initialized")

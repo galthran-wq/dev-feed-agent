@@ -1,5 +1,5 @@
-"""Manual memory tools (mem0). Routine remembering is passive (see runtime.py); these are the
-deliberate escape hatches. The function docstrings are the tool descriptions the LLM sees."""
+"""Manual memory tools (mem0); routine remembering is passive (see runtime.py). Function
+docstrings are the tool descriptions the LLM sees."""
 
 import json
 

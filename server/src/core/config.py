@@ -66,15 +66,12 @@ class Settings(BaseSettings):
     agent_history_token_budget: int = 12000
 
     # --- Long-term memory (mem0, OSS over pgvector; LLM + embeddings via OpenRouter) ---
-    # No separate enable flag: mem0 rides on the agent (gated by agent_enabled). pgvector ships
-    # by default (docker-compose image + the vector-extension migration), so there's nothing extra
-    # to turn on — an agent without working memory would just make the chat prompt lie.
-    # Cheap/fast is fine — mem0 fact-extraction is a simple task. Not OpenAI on purpose:
-    # openai/* can 403 on OpenRouter accounts without OpenAI access.
+    # No enable flag: mem0 rides on agent_enabled, and pgvector ships by default.
+    # Not OpenAI: openai/* can 403 on OpenRouter accounts without OpenAI access.
     mem0_chat_model: str = "deepseek/deepseek-v4-flash"
     mem0_embed_model: str = "qwen/qwen3-embedding-8b"
-    # Requested via the OpenAI `dimensions` param (qwen3 is matryoshka). MUST be <=2000 —
-    # pgvector's HNSW index rejects more. 1024 keeps ~95% retrieval at a quarter of the storage.
+    # Requested via the OpenAI `dimensions` param (qwen3 is matryoshka). MUST be <=2000
+    # (pgvector HNSW cap); 1024 keeps ~95% retrieval.
     mem0_embed_dims: int = 1024
     mem0_search_limit: int = 5
 
