@@ -1,5 +1,4 @@
-"""Durable-memory tools: the sectioned profile + the feed-item ledger (dedup of what's
-been shown). Specific/local facts live in the memories lane (memory_crud)."""
+"""Durable-memory tools: the sectioned profile + the feed-item ledger (dedup of what's been shown)."""
 
 import json
 

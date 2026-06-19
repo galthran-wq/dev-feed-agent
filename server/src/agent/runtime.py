@@ -68,7 +68,7 @@ async def _recall(user_id: UUID, query: str) -> str | None:
         logger.warning("mem0_search_failed", user_id=str(user_id), error=str(exc))
         return None
     results = res.get("results", []) if isinstance(res, dict) else res
-    facts = [r["memory"] for r in results if r.get("memory")]
+    facts = [r.get("memory") for r in results if r.get("memory")]
     if not facts:
         return None
     lines = "\n".join(f"- {f}" for f in facts)

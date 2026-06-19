@@ -176,3 +176,93 @@ async def test_search_memory_returns_json(monkeypatch: pytest.MonkeyPatch) -> No
 async def test_search_memory_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(memory_crud, "get_mem0", lambda: None)
     assert await memory_crud.search_memory(_ctx(), "x") == "[]"
+
+
+# --- exception paths: a failing mem0 must never surface to the caller -------------------------
+
+
+class _BoomMem:
+    async def search(self, **_: object) -> object:
+        raise RuntimeError("boom")
+
+    async def add(self, **_: object) -> None:
+        raise RuntimeError("boom")
+
+
+async def test_recall_none_on_search_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(runtime, "get_mem0", lambda: _BoomMem())
+    assert await runtime._recall(uuid4(), "query") is None
+
+
+async def test_remember_swallows_add_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(runtime, "get_mem0", lambda: _BoomMem())
+    runtime._remember(uuid4(), "u", "a")  # the bg task raises internally; must not propagate
+    await _drain_bg()
+
+
+async def test_search_memory_empty_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(memory_crud, "get_mem0", lambda: _BoomMem())
+    assert await memory_crud.search_memory(_ctx(), "q") == "[]"
+
+
+# --- chat() wiring: recall rides in at the tail, the turn gets remembered ---------------------
+
+
+async def test_chat_injects_recall_and_remembers(monkeypatch: pytest.MonkeyPatch) -> None:
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import StaticPool
+    from src.agent.channels.base import CollectingChannel
+    from src.core import config
+    from src.core.database import Base
+    from src.models.postgres.users import UserModel
+
+    monkeypatch.setattr(config.settings, "openrouter_api_key", "k")  # _require_agent gate
+    engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)()
+    user = UserModel(email="m@e.com", password_hash="x", is_verified=True)
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+
+    fake = FakeMem({"results": [{"memory": "likes Rust"}]})
+    monkeypatch.setattr(runtime, "get_mem0", lambda: fake)
+    captured: dict = {}
+
+    class _Result:
+        output = "Here are some rust repos."
+
+        def new_messages_json(self) -> bytes:
+            return b"[]"
+
+    class _Agent:
+        async def __aenter__(self) -> "_Agent":
+            return self
+
+        async def __aexit__(self, *exc: object) -> None:
+            return None
+
+        async def run(self, message: str, message_history: object = None, deps: object = None) -> _Result:
+            captured["history"] = message_history or []
+            return _Result()  # no send_message → fallback delivers result.output
+
+    async def fake_make() -> _Agent:
+        return _Agent()
+
+    monkeypatch.setattr(runtime.agents, "make_chat_agent", fake_make)
+
+    ch = CollectingChannel()
+    await runtime.chat(session, user, "what's new in rust?", ch)
+    await _drain_bg()
+    await session.close()
+    await engine.dispose()
+
+    # recall searched on the user's message; the fact block rode in as the tail request
+    assert fake.searched["query"] == "what's new in rust?"
+    tail = captured["history"][-1]
+    assert tail.parts[0].content.startswith(runtime._FACTS_SENTINEL)
+    assert "likes Rust" in tail.parts[0].content
+    # the delivered fallback text was remembered as the assistant turn
+    assert ch.messages == ["Here are some rust repos."]
+    assert fake.added[0]["messages"][1] == {"role": "assistant", "content": "Here are some rust repos."}
