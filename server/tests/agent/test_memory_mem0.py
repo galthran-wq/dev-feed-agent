@@ -26,9 +26,6 @@ class FakeMem:
         self.added.append({"messages": messages, "user_id": user_id})
 
 
-# --- _prime_history: strips system parts AND any leaked recall block ---------------------------
-
-
 def test_prime_history_strips_system_and_recall_block() -> None:
     sentinel_block = f"{runtime._FACTS_SENTINEL}\n## Relevant facts about the user\n- likes Rust"
     history = [
@@ -49,9 +46,6 @@ def test_prime_history_strips_system_and_recall_block() -> None:
     assert len(systems) == 1
 
 
-# --- _append_facts: ephemeral tail placement --------------------------------------------------
-
-
 def test_append_facts_appends_at_tail() -> None:
     primed = [ModelRequest(parts=[SystemPromptPart(content="sys")])]
     out = runtime._append_facts(primed, "FACTS")
@@ -63,9 +57,6 @@ def test_append_facts_appends_at_tail() -> None:
 def test_append_facts_noop_when_none() -> None:
     primed = [ModelRequest(parts=[SystemPromptPart(content="sys")])]
     assert runtime._append_facts(primed, None) is primed
-
-
-# --- _recall ----------------------------------------------------------------------------------
 
 
 async def test_recall_renders_block_with_sentinel(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -106,9 +97,6 @@ async def test_recall_none_when_no_results(monkeypatch: pytest.MonkeyPatch) -> N
     assert await runtime._recall(uuid4(), "query") is None
 
 
-# --- _remember (background extraction) --------------------------------------------------------
-
-
 async def _drain_bg() -> None:
     await asyncio.gather(*list(runtime._bg_tasks))
 
@@ -142,9 +130,6 @@ async def test_remember_noop_when_disabled(monkeypatch: pytest.MonkeyPatch) -> N
     await _drain_bg()
 
 
-# --- tools: add_memory / search_memory --------------------------------------------------------
-
-
 def _ctx() -> SimpleNamespace:
     return SimpleNamespace(deps=SimpleNamespace(user_id=uuid4()))
 
@@ -176,9 +161,6 @@ async def test_search_memory_when_disabled(monkeypatch: pytest.MonkeyPatch) -> N
     assert await memory_crud.search_memory(_ctx(), "x") == "[]"
 
 
-# --- exception paths: a failing mem0 must never surface to the caller -------------------------
-
-
 class _BoomMem:
     async def search(self, **_: object) -> object:
         raise RuntimeError("boom")
@@ -201,9 +183,6 @@ async def test_remember_swallows_add_error(monkeypatch: pytest.MonkeyPatch) -> N
 async def test_search_memory_empty_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(memory_crud, "get_mem0", lambda: _BoomMem())
     assert await memory_crud.search_memory(_ctx(), "q") == "[]"
-
-
-# --- chat() wiring: recall rides in at the tail, the turn gets remembered ---------------------
 
 
 async def test_chat_injects_recall_and_remembers(monkeypatch: pytest.MonkeyPatch) -> None:
