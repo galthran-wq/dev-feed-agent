@@ -54,6 +54,3 @@ async def search_memory(ctx: RunContext[AgentDeps], query: str) -> str:
     results = res.get("results", []) if isinstance(res, dict) else res
     facts = [{"id": r.get("id"), "memory": r.get("memory")} for r in results if r.get("memory")]
     return json.dumps(facts, ensure_ascii=False)
-
-
-MEMORY_CRUD_TOOLS = [add_memory, search_memory]
