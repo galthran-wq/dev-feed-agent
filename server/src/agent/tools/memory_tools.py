@@ -92,6 +92,5 @@ async def record_feed_items(ctx: RunContext[AgentDeps], items: list[ShownItem]) 
     return json.dumps({"recorded": recorded, "skipped_already_seen": len(items) - len(recorded)}, ensure_ascii=False)
 
 
-# search_memory is read-only (shared with sub-agents); add_memory (a write) is main-agent-only.
 MEMORY_TOOLS = [read_profile, update_profile_section, list_recently_shown, record_feed_items, search_memory]
 MAIN_MEMORY_TOOLS = [add_memory]

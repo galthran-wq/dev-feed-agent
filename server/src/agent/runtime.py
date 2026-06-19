@@ -24,7 +24,6 @@ from src.repositories.profiles import ProfileRepository
 
 logger = structlog.get_logger()
 
-# Tags the ephemeral recall block so _prime_history strips it if it ever leaks into history.
 _FACTS_SENTINEL = "<!--mem0-facts-->"
 _bg_tasks: set[asyncio.Task[None]] = set()
 
@@ -75,8 +74,6 @@ async def _recall(user_id: UUID, query: str) -> str | None:
     return f"{_FACTS_SENTINEL}\n## Relevant facts about the user\n{lines}"
 
 
-# Facts go at the TAIL (after system+history, before the new message): keeps the cacheable
-# prefix stable, and message_history isn't persisted so the block never accumulates.
 def _append_facts(primed: list[ModelMessage], facts: str | None) -> list[ModelMessage]:
     if not facts:
         return primed
@@ -196,7 +193,6 @@ async def curate_feed(session: AsyncSession, user: UserModel, channel: Channel |
     agent = await agents.make_chat_agent()
     deps = _deps(session, user, channel)
     primed = _prime_history(history, agents.build_chat_system_prompt(channel))
-    # Recall-only: the synthetic feed turn isn't the user talking, so no _remember here.
     primed = _append_facts(primed, await _recall(user.id, profile_md))
     async with agent:
         result = await agent.run(prompt, message_history=primed, deps=deps)

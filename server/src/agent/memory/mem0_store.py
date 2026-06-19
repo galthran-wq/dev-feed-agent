@@ -53,7 +53,7 @@ def get_mem0() -> "AsyncMemory | None":
     if not settings.agent_enabled:
         return None
     if _mem is None:
-        from mem0 import AsyncMemory  # lazy: mem0 is heavy, import only when first used
+        from mem0 import AsyncMemory
 
         _mem = AsyncMemory.from_config(_config())
         logger.info("mem0_initialized")

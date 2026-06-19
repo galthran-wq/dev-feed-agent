@@ -34,19 +34,17 @@ def test_prime_history_strips_system_and_recall_block() -> None:
     history = [
         ModelRequest(parts=[SystemPromptPart(content="stale system"), UserPromptPart(content="hello")]),
         ModelResponse(parts=[TextPart(content="hi there")]),
-        ModelRequest(parts=[UserPromptPart(content=sentinel_block)]),  # a leaked recall block
+        ModelRequest(parts=[UserPromptPart(content=sentinel_block)]),
     ]
 
     primed = runtime._prime_history(history, "FRESH SYSTEM")
 
-    # Leads with exactly the fresh system prompt.
     assert isinstance(primed[0].parts[0], SystemPromptPart)
     assert primed[0].parts[0].content == "FRESH SYSTEM"
 
     user_contents = [p.content for m in primed for p in getattr(m, "parts", []) if isinstance(p, UserPromptPart)]
-    assert "hello" in user_contents  # real user turn survives
-    assert sentinel_block not in user_contents  # leaked recall block is gone — no accumulation
-    # Only the one fresh system part exists.
+    assert "hello" in user_contents
+    assert sentinel_block not in user_contents
     systems = [p for m in primed for p in getattr(m, "parts", []) if isinstance(p, SystemPromptPart)]
     assert len(systems) == 1
 
@@ -140,7 +138,7 @@ async def test_remember_noop_when_assistant_empty(monkeypatch: pytest.MonkeyPatc
 
 async def test_remember_noop_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runtime, "get_mem0", lambda: None)
-    runtime._remember(uuid4(), "user", "assistant")  # must not raise
+    runtime._remember(uuid4(), "user", "assistant")
     await _drain_bg()
 
 
@@ -196,7 +194,7 @@ async def test_recall_none_on_search_error(monkeypatch: pytest.MonkeyPatch) -> N
 
 async def test_remember_swallows_add_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runtime, "get_mem0", lambda: _BoomMem())
-    runtime._remember(uuid4(), "u", "a")  # the bg task raises internally; must not propagate
+    runtime._remember(uuid4(), "u", "a")
     await _drain_bg()
 
 
@@ -216,7 +214,7 @@ async def test_chat_injects_recall_and_remembers(monkeypatch: pytest.MonkeyPatch
     from src.core.database import Base
     from src.models.postgres.users import UserModel
 
-    monkeypatch.setattr(config.settings, "openrouter_api_key", "k")  # _require_agent gate
+    monkeypatch.setattr(config.settings, "openrouter_api_key", "k")
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -245,7 +243,7 @@ async def test_chat_injects_recall_and_remembers(monkeypatch: pytest.MonkeyPatch
 
         async def run(self, message: str, message_history: object = None, deps: object = None) -> _Result:
             captured["history"] = message_history or []
-            return _Result()  # no send_message → fallback delivers result.output
+            return _Result()  # no send_message → chat() falls back to result.output
 
     async def fake_make() -> _Agent:
         return _Agent()
@@ -258,11 +256,9 @@ async def test_chat_injects_recall_and_remembers(monkeypatch: pytest.MonkeyPatch
     await session.close()
     await engine.dispose()
 
-    # recall searched on the user's message; the fact block rode in as the tail request
     assert fake.searched["query"] == "what's new in rust?"
     tail = captured["history"][-1]
     assert tail.parts[0].content.startswith(runtime._FACTS_SENTINEL)
     assert "likes Rust" in tail.parts[0].content
-    # the delivered fallback text was remembered as the assistant turn
     assert ch.messages == ["Here are some rust repos."]
     assert fake.added[0]["messages"][1] == {"role": "assistant", "content": "Here are some rust repos."}
