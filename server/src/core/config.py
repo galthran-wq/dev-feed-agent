@@ -67,9 +67,13 @@ class Settings(BaseSettings):
 
     # --- Long-term memory (mem0, OSS over pgvector; LLM + embeddings via OpenRouter) ---
     mem0_enabled: bool = False
-    mem0_chat_model: str = "openai/gpt-4o-mini"
+    # Cheap/fast is fine — mem0 fact-extraction is a simple task. Not OpenAI on purpose:
+    # openai/* can 403 on OpenRouter accounts without OpenAI access.
+    mem0_chat_model: str = "deepseek/deepseek-v4-flash"
     mem0_embed_model: str = "qwen/qwen3-embedding-8b"
-    mem0_embed_dims: int = 4096  # must match the embed model's output dimension
+    # Requested via the OpenAI `dimensions` param (qwen3 is matryoshka). MUST be <=2000 —
+    # pgvector's HNSW index rejects more. 1024 keeps ~95% retrieval at a quarter of the storage.
+    mem0_embed_dims: int = 1024
     mem0_search_limit: int = 5
 
     @property
