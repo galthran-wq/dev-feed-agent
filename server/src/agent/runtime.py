@@ -14,17 +14,11 @@ from src.agent import agents
 from src.agent.channels import Channel
 from src.agent.deps import AgentDeps
 from src.core.config import settings
-from src.core.exceptions import AppError
 from src.models.postgres.users import UserModel
 from src.repositories.agent_messages import AgentMessageRepository
 from src.repositories.profiles import ProfileRepository
 
 logger = structlog.get_logger()
-
-
-def _require_agent() -> None:
-    if not settings.agent_enabled:
-        raise AppError(status_code=503, detail="LLM agent is not configured (set OPENROUTER_API_KEY)")
 
 
 def _prime_history(history: list[ModelMessage], system_text: str) -> list[ModelMessage]:
@@ -55,7 +49,6 @@ def _deps(session: AsyncSession, user: UserModel, channel: Channel | None = None
 
 async def chat(session: AsyncSession, user: UserModel, message: str, channel: Channel | None = None) -> None:
     """Handle one chat turn against the shared, persisted message history."""
-    _require_agent()
     msg_repo = AgentMessageRepository(session)
     history = await msg_repo.load(user.id, max_tokens=settings.agent_history_token_budget)
 
@@ -79,7 +72,6 @@ async def chat(session: AsyncSession, user: UserModel, message: str, channel: Ch
 
 async def compact(session: AsyncSession, user: UserModel) -> str:
     """/compact — summarize stored history into a single note, freeing context."""
-    _require_agent()
     msg_repo = AgentMessageRepository(session)
     # Pull as much history as we can to summarize it (bounded so compaction itself stays sane).
     history = await msg_repo.load(user.id, max_tokens=100_000, max_runs=1000)
@@ -104,7 +96,6 @@ async def reset(session: AsyncSession, user: UserModel) -> None:
 
 async def curate_feed(session: AsyncSession, user: UserModel, channel: Channel | None = None) -> tuple[int, int]:
     """Assemble the feed as a synthetic agent turn. Returns (new_items recorded, messages sent)."""
-    _require_agent()
     profile_md = await ProfileRepository(session).get_markdown(user.id)
 
     prompt = (

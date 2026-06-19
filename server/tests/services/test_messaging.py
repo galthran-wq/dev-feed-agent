@@ -2,18 +2,13 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.agent import runtime
 from src.agent.channels import CollectingChannel
-from src.core import config
 from src.models.postgres.users import UserModel
 from src.services import messaging
 
 
 @pytest.fixture
 def _wire(monkeypatch: pytest.MonkeyPatch) -> dict:
-    """Enable the agent and stub the runtime entry points so we assert dispatch (not LLM
-    behavior). process_incoming no longer owns a session or resolves the user — the caller
-    passes both — so there's nothing to wire there."""
-    monkeypatch.setattr(config.settings, "openrouter_api_key", "test-key")  # agent_enabled
-
+    """Stub the runtime entry points so we assert dispatch, not LLM behavior."""
     calls: dict = {}
 
     async def fake_reset(session: AsyncSession, user: UserModel) -> None:
