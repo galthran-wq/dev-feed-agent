@@ -93,16 +93,6 @@ async def record_feed_items(ctx: RunContext[AgentDeps], items: list[ShownItem]) 
     return json.dumps({"recorded": recorded, "skipped_already_seen": len(items) - len(recorded)}, ensure_ascii=False)
 
 
-# Base memory tools — shared with sub-agents. search_memory is read-only, so it's safe (and
-# useful) for a gatherer to consult. add_memory (a write) is main-agent-only: see MAIN_MEMORY_TOOLS.
-MEMORY_TOOLS = [
-    read_profile,
-    update_profile_section,
-    list_recently_shown,
-    record_feed_items,
-    search_memory,
-]
-
-# Main-agent-only memory tools. Explicit memory writes are the chat agent's concern; routine
-# remembering is passive (runtime._remember), and sub-agents shouldn't author user memories.
+# search_memory is read-only (shared with sub-agents); add_memory (a write) is main-agent-only.
+MEMORY_TOOLS = [read_profile, update_profile_section, list_recently_shown, record_feed_items, search_memory]
 MAIN_MEMORY_TOOLS = [add_memory]

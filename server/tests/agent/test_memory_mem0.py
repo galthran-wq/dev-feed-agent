@@ -1,5 +1,5 @@
-"""Unit tests for the mem0 wiring: passive recall (ephemeral, cache-friendly, non-accumulating)
-and the deliberate add/search tools. mem0 itself is mocked — these never touch the network."""
+"""Unit tests for the mem0 wiring (recall, sentinel-strip, background extract, tools). mem0 is
+mocked — these never touch the network."""
 
 import asyncio
 from types import SimpleNamespace

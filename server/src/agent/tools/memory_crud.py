@@ -1,11 +1,5 @@
-"""Agent-facing tools over the user's long-term memory (mem0).
-
-Routine remembering is *passive* — the runtime auto-recalls relevant facts into context and
-auto-extracts new ones after each turn (see src/agent/runtime.py), so the agent no longer has
-to manage memory by hand. These two tools are the deliberate escape hatches:
-- ``add_memory``    — store a fact when the user explicitly asks ("remember this").
-- ``search_memory`` — look something up by a CUSTOM query beyond what's already in context.
-(Function docstrings below are the tool descriptions the LLM sees — keep them.)"""
+"""Manual memory tools (mem0). Routine remembering is passive (see runtime.py); these are the
+deliberate escape hatches. The function docstrings are the tool descriptions the LLM sees."""
 
 import json
 
@@ -19,29 +13,22 @@ logger = structlog.get_logger()
 
 
 async def add_memory(ctx: RunContext[AgentDeps], text: str) -> str:
-    """Explicitly store a durable fact about the user (e.g. they said "remember that ...").
-
-    Routine facts are captured automatically from the conversation — use this only for an
-    explicit ask or a fact you don't want to risk losing.
-    """
+    """Store a durable fact about the user when they explicitly ask you to remember something.
+    Routine facts are captured automatically — use this only for an explicit ask."""
     mem = get_mem0()
     if mem is None:
         return "Memory store is not configured; nothing saved."
     try:
         await mem.add(messages=[{"role": "user", "content": text}], user_id=str(ctx.deps.user_id))
-    except Exception as exc:  # best-effort: never surface an internal failure as a tool error
+    except Exception as exc:
         logger.warning("add_memory_failed", user_id=str(ctx.deps.user_id), error=str(exc))
         return "Could not save that right now."
     return "Saved."
 
 
 async def search_memory(ctx: RunContext[AgentDeps], query: str) -> str:
-    """Semantically search the user's long-term memory for facts matching ``query``.
-
-    Relevant facts for the current message are already injected into your context — reach for
-    this when you want a deliberate lookup with a different, custom query (e.g. "have they ever
-    mentioned Kafka?"). Returns a JSON array of {id, memory}.
-    """
+    """Search the user's long-term memory for facts matching ``query`` (a custom lookup beyond
+    what's already in your context). Returns a JSON array of {id, memory}."""
     mem = get_mem0()
     if mem is None:
         return "[]"

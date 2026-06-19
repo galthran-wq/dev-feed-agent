@@ -24,14 +24,8 @@ from src.repositories.profiles import ProfileRepository
 
 logger = structlog.get_logger()
 
-# Marks the ephemeral mem0 recall block so _prime_history can strip it if it ever leaks into
-# persisted history (it shouldn't — message_history is excluded from new_messages_json — but this
-# guarantees recalled facts never accumulate turn over turn). An HTML comment won't collide with
-# real user text and is invisible to the user even if a model echoes it.
+# Tags the ephemeral recall block so _prime_history strips it if it ever leaks into history.
 _FACTS_SENTINEL = "<!--mem0-facts-->"
-
-# Hold strong refs to background extraction tasks so they aren't GC'd mid-flight (asyncio only
-# keeps weak refs to created tasks).
 _bg_tasks: set[asyncio.Task[None]] = set()
 
 
@@ -57,8 +51,6 @@ def _prime_history(history: list[ModelMessage], system_text: str) -> list[ModelM
 
 
 def _is_droppable_part(part: object) -> bool:
-    """System prompts (re-injected fresh each run) and any leaked mem0 recall block (re-recalled
-    fresh each run) must never persist across turns."""
     if isinstance(part, SystemPromptPart):
         return True
     if isinstance(part, UserPromptPart) and isinstance(part.content, str):
@@ -67,9 +59,6 @@ def _is_droppable_part(part: object) -> bool:
 
 
 async def _recall(user_id: UUID, query: str) -> str | None:
-    """Search mem0 for facts relevant to ``query`` and render them as a context block. Returns
-    None when mem0 is disabled, the query is empty, or nothing relevant is found. Best-effort:
-    a search failure degrades to no recall, never to a failed turn."""
     mem = get_mem0()
     if mem is None or not query.strip():
         return None
@@ -86,19 +75,15 @@ async def _recall(user_id: UUID, query: str) -> str | None:
     return f"{_FACTS_SENTINEL}\n## Relevant facts about the user\n{lines}"
 
 
+# Facts go at the TAIL (after system+history, before the new message): keeps the cacheable
+# prefix stable, and message_history isn't persisted so the block never accumulates.
 def _append_facts(primed: list[ModelMessage], facts: str | None) -> list[ModelMessage]:
-    """Place recalled facts as an ephemeral turn at the TAIL of the replayed history (just before
-    the current user message). Tail placement keeps the system+history prefix byte-stable for
-    LLM prompt caching; living in message_history (not new_messages) keeps it out of persistence."""
     if not facts:
         return primed
     return [*primed, ModelRequest(parts=[UserPromptPart(content=facts)])]
 
 
 def _remember(user_id: UUID, user_text: str, assistant_text: str) -> None:
-    """Fire-and-forget: hand this turn to mem0 for fact extraction. Runs on mem0's own connection
-    pool (independent of the request session), so it can outlive the request; never blocks or
-    fails the chat."""
     mem = get_mem0()
     if mem is None or not (user_text.strip() and assistant_text.strip()):
         return
@@ -152,10 +137,9 @@ async def chat(session: AsyncSession, user: UserModel, message: str, channel: Ch
         if fallback and channel is not None:
             logger.warning("agent_turn_fallback_send", user_id=str(user.id))
             await channel.send(fallback)
-            assistant_text = fallback  # capture the fallback too (it bypassed the send_message tool)
+            assistant_text = fallback
         else:
             logger.warning("agent_turn_no_output", user_id=str(user.id))
-    # Passive write: extract durable facts from this turn (background, never blocks the reply).
     _remember(user.id, message, assistant_text)
 
 
@@ -212,8 +196,7 @@ async def curate_feed(session: AsyncSession, user: UserModel, channel: Channel |
     agent = await agents.make_chat_agent()
     deps = _deps(session, user, channel)
     primed = _prime_history(history, agents.build_chat_system_prompt(channel))
-    # Recall facts relevant to their interests to personalize the feed. No passive write here:
-    # the synthetic "assemble the feed" turn isn't the user talking, so there's nothing to learn.
+    # Recall-only: the synthetic feed turn isn't the user talking, so no _remember here.
     primed = _append_facts(primed, await _recall(user.id, profile_md))
     async with agent:
         result = await agent.run(prompt, message_history=primed, deps=deps)

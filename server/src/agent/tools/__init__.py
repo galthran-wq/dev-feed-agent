@@ -17,9 +17,8 @@ from src.agent.tools.subagent_tools import SUBAGENT_TOOLS
 # Typed as list[Any] because pydantic-ai accepts heterogeneous tool callables; mypy
 # otherwise joins the distinct async-function types down to `function`.
 # BASE_TOOLS is the SUB-AGENT toolset; MAIN_TOOLS adds what only the main agent may do.
-# Sub-agents get neither send_message (only the main agent talks to the user — they report back)
-# nor spawn_subagent (anti-recursion) nor add_memory (only the main agent authors user memories;
-# routine remembering is passive). All exclusions are structural, not prompt-enforced.
+# Sub-agents get neither send_message (only the main agent talks to the user) nor spawn_subagent
+# (anti-recursion) nor add_memory (writes are main-only). Exclusions are structural, not prompt-enforced.
 BASE_TOOLS: list[Any] = [*GITHUB_TOOLS, *FEED_TOOLS, *MEMORY_TOOLS]
 MAIN_TOOLS: list[Any] = [*BASE_TOOLS, *MAIN_MEMORY_TOOLS, *MESSAGING_TOOLS, *SUBAGENT_TOOLS, *SCHEDULE_TOOLS]
 

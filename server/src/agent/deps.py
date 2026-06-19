@@ -19,8 +19,7 @@ class AgentDeps:
     recorded: list[dict[str, str]] = field(default_factory=list)
     channel: Channel | None = None
     sent_count: int = 0
-    # Text the agent delivered this run (via send_message). Captured channel-agnostically so the
-    # runtime can hand the user+assistant turn to mem0 for passive fact extraction.
+    # Text delivered this run (via send_message), so the runtime can feed the turn to mem0.
     sent_texts: list[str] = field(default_factory=list)
     # One shared AsyncSession across the run, but models (e.g. deepseek) emit parallel tool
     # calls that pydantic-ai runs concurrently — and AsyncSession isn't concurrency-safe.
