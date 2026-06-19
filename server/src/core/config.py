@@ -66,7 +66,9 @@ class Settings(BaseSettings):
     agent_history_token_budget: int = 12000
 
     # --- Long-term memory (mem0, OSS over pgvector; LLM + embeddings via OpenRouter) ---
-    mem0_enabled: bool = False
+    # No separate enable flag: mem0 rides on the agent (gated by agent_enabled). pgvector ships
+    # by default (docker-compose image + the vector-extension migration), so there's nothing extra
+    # to turn on — an agent without working memory would just make the chat prompt lie.
     # Cheap/fast is fine — mem0 fact-extraction is a simple task. Not OpenAI on purpose:
     # openai/* can 403 on OpenRouter accounts without OpenAI access.
     mem0_chat_model: str = "deepseek/deepseek-v4-flash"
@@ -79,10 +81,6 @@ class Settings(BaseSettings):
     @property
     def agent_enabled(self) -> bool:
         return bool(self.openrouter_api_key)
-
-    @property
-    def mem0_active(self) -> bool:
-        return self.mem0_enabled and bool(self.openrouter_api_key)
 
     @property
     def telegram_enabled(self) -> bool:

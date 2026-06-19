@@ -230,6 +230,7 @@ async def test_chat_delivers_output_when_model_forgets_send_message(
         return _Agent()
 
     monkeypatch.setattr(config.settings, "openrouter_api_key", "k")  # agent_enabled
+    monkeypatch.setattr(runtime, "get_mem0", lambda: None)  # mem0 rides on agent_enabled; stub it out
     monkeypatch.setattr(runtime.agents, "make_chat_agent", fake_make)
 
     ch = CollectingChannel()
@@ -265,6 +266,7 @@ async def test_chat_no_send_and_empty_output_stays_silent(
         return _Agent()
 
     monkeypatch.setattr(config.settings, "openrouter_api_key", "k")
+    monkeypatch.setattr(runtime, "get_mem0", lambda: None)  # mem0 rides on agent_enabled; stub it out
     monkeypatch.setattr(runtime.agents, "make_chat_agent", fake_make)
 
     ch = CollectingChannel()
