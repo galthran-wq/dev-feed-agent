@@ -24,6 +24,7 @@ dependencies = [
     "tiktoken>=0.8.0",
     "cryptography>=42.0.0",
     "aiohttp-socks>=0.11.0",
+    "mem0ai>=0.1.0",
 ]
 
 [dependency-groups]
@@ -63,7 +64,7 @@ explicit_package_bases = true
 mypy_path = "."
 
 [[tool.mypy.overrides]]
-module = ["jose.*", "passlib.*", "apscheduler.*", "tiktoken.*"]
+module = ["jose.*", "passlib.*", "apscheduler.*", "tiktoken.*", "mem0.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

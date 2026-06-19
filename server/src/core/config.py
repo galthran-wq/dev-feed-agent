@@ -65,9 +65,23 @@ class Settings(BaseSettings):
     # bar (one compact line each), leaning exploit with some explore — see prompts/chat.md.
     agent_history_token_budget: int = 12000
 
+    # --- Long-term memory (mem0, OSS over pgvector in our Postgres) ---
+    # Opt-in: when disabled, the agent's memory features degrade to no-ops (tests, no-key envs).
+    # LLM + embeddings both go through OpenRouter (one key). pgvector reuses postgres_* above.
+    mem0_enabled: bool = False
+    mem0_chat_model: str = "openai/gpt-4o-mini"  # fact extraction in mem0's add() pipeline
+    mem0_embed_model: str = "qwen/qwen3-embedding-8b"
+    mem0_embed_dims: int = 4096  # MUST match the embedding model's output dimension
+    mem0_search_limit: int = 5
+
     @property
     def agent_enabled(self) -> bool:
         return bool(self.openrouter_api_key)
+
+    @property
+    def mem0_active(self) -> bool:
+        # Needs both the flag and an OpenRouter key (mem0's LLM + embeddings ride on it).
+        return self.mem0_enabled and bool(self.openrouter_api_key)
 
     @property
     def telegram_enabled(self) -> bool:
