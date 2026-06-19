@@ -18,8 +18,8 @@ class FakeMem:
         self.added: list[dict[str, object]] = []
         self._search_result = search_result if search_result is not None else {"results": []}
 
-    async def search(self, query: str, filters: dict[str, str], limit: int) -> object:
-        self.searched = {"query": query, "filters": filters, "limit": limit}
+    async def search(self, query: str, filters: dict[str, str], top_k: int) -> object:
+        self.searched = {"query": query, "filters": filters, "top_k": top_k}
         return self._search_result
 
     async def add(self, messages: list[dict[str, str]], user_id: str) -> None:

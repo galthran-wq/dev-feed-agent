@@ -74,7 +74,7 @@ async def _recall(user_id: UUID, query: str) -> str | None:
     if mem is None or not query.strip():
         return None
     try:
-        res = await mem.search(query=query, filters={"user_id": str(user_id)}, limit=settings.mem0_search_limit)
+        res = await mem.search(query=query, filters={"user_id": str(user_id)}, top_k=settings.mem0_search_limit)
     except Exception as exc:
         logger.warning("mem0_search_failed", user_id=str(user_id), error=str(exc))
         return None

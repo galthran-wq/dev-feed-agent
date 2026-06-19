@@ -47,7 +47,7 @@ async def search_memory(ctx: RunContext[AgentDeps], query: str) -> str:
         return "[]"
     uid = str(ctx.deps.user_id)
     try:
-        res = await mem.search(query=query, filters={"user_id": uid}, limit=settings.mem0_search_limit)
+        res = await mem.search(query=query, filters={"user_id": uid}, top_k=settings.mem0_search_limit)
     except Exception as exc:
         logger.warning("search_memory_failed", user_id=str(ctx.deps.user_id), error=str(exc))
         return "[]"
