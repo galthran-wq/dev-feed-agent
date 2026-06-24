@@ -36,18 +36,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from src.agent.channels import remove_webhook, setup_webhook
     from src.services import scheduler
 
-    # Telegram is the only channel — the app is useless without it, so require it FIRST,
-    # before starting anything we'd then have to tear down on a failed boot.
+    if not settings.openrouter_api_key:
+        raise RuntimeError("OPENROUTER_API_KEY is required — the agent is the whole product.")
     if not settings.telegram_bot_token or not settings.telegram_webhook_secret:
         raise RuntimeError(
             "Telegram is required: set TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET "
             "(and a public HTTPS APP_BASE_URL Telegram can reach)."
         )
 
-    if settings.discovery_enabled and settings.agent_enabled:
+    if settings.discovery_enabled:
         scheduler.start_scheduler()
     else:
-        logger.info("discovery_disabled", agent_enabled=settings.agent_enabled)
+        logger.info("discovery_disabled")
 
     await setup_webhook()
 
