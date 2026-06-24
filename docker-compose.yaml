@@ -79,7 +79,7 @@ services:
     image: dev-feed-mcp-gateway:latest
     build:
       context: ./deploy/mcp
-    command: ["sh", "-lc", "npx -y supergateway@3.4.3 --stdio \"uvx arxiv-mcp-server\" --outputTransport streamableHttp --port 8000 --streamableHttpPath /mcp"]
+    command: ["sh", "-lc", "npx -y supergateway@3.4.3 --stdio \"arxiv-mcp-server\" --outputTransport streamableHttp --port 8000 --streamableHttpPath /mcp"]
     networks:
       - app-network
     restart: unless-stopped
