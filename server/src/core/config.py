@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     # Unreachable sources are dropped (logged) instead of aborting the whole run.
     mcp_probe_timeout: float = 5.0
 
+    # Trendshift (trendshift.io) trending GitHub repos. Keyless HTTP source (no MCP
+    # container), so on by default; set false to drop it (e.g. if scraping is blocked).
+    trendshift_enabled: bool = True
+
     # --- Feed curation ---
     discovery_enabled: bool = True
     poll_interval_minutes: int = 60
