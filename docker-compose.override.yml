@@ -1,0 +1,17 @@
+# Host-specific, gitignored — NOT part of the committed stack.
+#
+# This host has a poisoned host-side ARP/neighbor entry for 192.168.64.2 (it maps to
+# a foreign MAC), which black-holes whatever container Docker assigns that address.
+# Docker hands out .2 first (after the .1 gateway), so a fresh container reliably lands
+# on the cursed IP and loses all intra-network connectivity.
+#
+# Pin the IPAM allocation range to start at .16 so .2..15 are never auto-assigned.
+# The real fix is host-side (clear the stale neighbor entry / stop whatever claims .2);
+# this just keeps the stack working across `compose up` in the meantime.
+networks:
+  app-network:
+    ipam:
+      config:
+        - subnet: 192.168.64.0/20
+          ip_range: 192.168.64.16/28
+          gateway: 192.168.64.1

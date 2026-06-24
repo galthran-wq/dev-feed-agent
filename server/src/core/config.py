@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     # container), so on by default; set false to drop it (e.g. if scraping is blocked).
     trendshift_enabled: bool = True
 
+    # Papers with Code (paperswithcode.co) trending ML/AI papers. Keyless JSON API; on
+    # by default, set false to drop it.
+    paperswithcode_enabled: bool = True
+
     # --- Observability (Pydantic Logfire; opt-in) ---
     # Write token for the app to SEND traces; empty => tracing off (app runs normally).
     # The read token (for querying traces, e.g. the MCP) is a separate credential.
