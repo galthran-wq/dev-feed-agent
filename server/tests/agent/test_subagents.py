@@ -20,9 +20,6 @@ def _trace_json(text: str) -> bytes:
     return ModelMessagesTypeAdapter.dump_json(msgs)
 
 
-# --- SubagentSessionRepository -------------------------------------------------------------
-
-
 async def test_create_mints_id_and_empty_trace(db_session: AsyncSession, test_user: UserModel) -> None:
     repo = SubagentSessionRepository(db_session)
     sid = await repo.create(test_user.id, "profile_build")
@@ -46,9 +43,6 @@ async def test_save_overwrites_and_load_roundtrips(db_session: AsyncSession, tes
 
 async def test_load_unknown_session_is_empty(db_session: AsyncSession) -> None:
     assert await SubagentSessionRepository(db_session).load(uuid4()) == []
-
-
-# --- run_subagent (always owns its own session) --------------------------------------------
 
 
 class _FakeResult:
@@ -156,9 +150,6 @@ async def test_feed_gather_kind_registered() -> None:
     assert spec is not None and spec.prompt_file == "feed_gather.md"
 
 
-# --- wiring: only the main agent may message or spawn --------------------------------------
-
-
 def test_today_note_grounds_the_real_date() -> None:
     from datetime import UTC, datetime
 
@@ -230,6 +221,7 @@ async def test_chat_delivers_output_when_model_forgets_send_message(
         return _Agent()
 
     monkeypatch.setattr(config.settings, "openrouter_api_key", "k")  # agent_enabled
+    monkeypatch.setattr(runtime, "get_mem0", lambda: None)  # mem0 rides on agent_enabled; stub it out
     monkeypatch.setattr(runtime.agents, "make_chat_agent", fake_make)
 
     ch = CollectingChannel()
@@ -265,6 +257,7 @@ async def test_chat_no_send_and_empty_output_stays_silent(
         return _Agent()
 
     monkeypatch.setattr(config.settings, "openrouter_api_key", "k")
+    monkeypatch.setattr(runtime, "get_mem0", lambda: None)  # mem0 rides on agent_enabled; stub it out
     monkeypatch.setattr(runtime.agents, "make_chat_agent", fake_make)
 
     ch = CollectingChannel()

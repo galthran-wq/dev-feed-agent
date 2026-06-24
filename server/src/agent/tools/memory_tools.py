@@ -1,5 +1,4 @@
-"""Durable-memory tools: the sectioned profile + the feed-item ledger (dedup of what's
-been shown). Specific/local facts live in the memories lane (memory_crud)."""
+"""Durable-memory tools: the sectioned profile + the feed-item ledger (dedup of what's been shown)."""
 
 import json
 
@@ -7,7 +6,7 @@ import structlog
 from pydantic import BaseModel, Field
 from pydantic_ai import RunContext
 from src.agent.deps import AgentDeps
-from src.agent.tools.memory_crud import MEMORY_CRUD_TOOLS
+from src.agent.tools.memory_crud import add_memory, search_memory
 from src.models.postgres.profiles import PROFILE_SECTIONS
 from src.repositories.feed_items import FeedItemRepository
 from src.repositories.profiles import ProfileRepository
@@ -93,10 +92,5 @@ async def record_feed_items(ctx: RunContext[AgentDeps], items: list[ShownItem]) 
     return json.dumps({"recorded": recorded, "skipped_already_seen": len(items) - len(recorded)}, ensure_ascii=False)
 
 
-MEMORY_TOOLS = [
-    read_profile,
-    update_profile_section,
-    list_recently_shown,
-    record_feed_items,
-    *MEMORY_CRUD_TOOLS,
-]
+MEMORY_TOOLS = [read_profile, update_profile_section, list_recently_shown, record_feed_items, search_memory]
+MAIN_MEMORY_TOOLS = [add_memory]

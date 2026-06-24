@@ -18,9 +18,6 @@ _scheduler: Any | None = None
 
 
 async def poll_all_users() -> None:
-    if not settings.agent_enabled:
-        logger.info("poll_skipped_agent_disabled")
-        return
     try:
         async with AsyncSessionLocal() as session:
             conns = await ConnectionRepository(session).list_feedable()

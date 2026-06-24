@@ -62,12 +62,27 @@ class Settings(BaseSettings):
     # container), so on by default; set false to drop it (e.g. if scraping is blocked).
     trendshift_enabled: bool = True
 
+    # --- Observability (Pydantic Logfire; opt-in) ---
+    # Write token for the app to SEND traces; empty => tracing off (app runs normally).
+    # The read token (for querying traces, e.g. the MCP) is a separate credential.
+    logfire_token: str = ""
+    logfire_base_url: str = "https://logfire-eu.pydantic.dev"
+    logfire_environment: str = "production"
+
     # --- Feed curation ---
     discovery_enabled: bool = True
     poll_interval_minutes: int = 60
     # No fixed feed size: the agent surfaces every fresh, relevant item that clears the quality
     # bar (one compact line each), leaning exploit with some explore — see prompts/chat.md.
     agent_history_token_budget: int = 12000
+
+    # --- Long-term memory (mem0, OSS over pgvector; LLM + embeddings via OpenRouter) ---
+    mem0_chat_model: str = "deepseek/deepseek-v4-flash"
+    mem0_embed_model: str = "qwen/qwen3-embedding-8b"
+    # qwen3 is matryoshka (max 4096) — truncated to this via the OpenAI `dimensions` param.
+    # Keep <=2000: pgvector's HNSW index rejects more.
+    mem0_embed_dims: int = 1024
+    mem0_search_limit: int = 5
 
     @property
     def agent_enabled(self) -> bool:
