@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     # Unreachable sources are dropped (logged) instead of aborting the whole run.
     mcp_probe_timeout: float = 5.0
 
+    # Trendshift (trendshift.io) trending GitHub repos. Keyless HTTP source (no MCP
+    # container), so on by default; set false to drop it (e.g. if scraping is blocked).
+    trendshift_enabled: bool = True
+
     # --- Observability (Pydantic Logfire; opt-in) ---
     # Write token for the app to SEND traces; empty => tracing off (app runs normally).
     # The read token (for querying traces, e.g. the MCP) is a separate credential.

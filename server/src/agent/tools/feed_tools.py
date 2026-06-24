@@ -11,6 +11,8 @@ import structlog
 from pydantic_ai import RunContext
 from src.agent.deps import AgentDeps
 from src.agent.github_client import GithubClient
+from src.agent.trendshift_client import PERIODS, TrendshiftClient
+from src.core.config import settings
 
 logger = structlog.get_logger()
 
@@ -53,4 +55,19 @@ async def search_github_repositories(ctx: RunContext[AgentDeps], query: str, lim
     return json.dumps(repos, ensure_ascii=False)
 
 
-FEED_TOOLS = [find_github_issues, search_github_repositories]
+async def find_trending_repos(ctx: RunContext[AgentDeps], period: str = "daily", limit: int = 25) -> str:
+    """List repos trending on Trendshift (trendshift.io) for ``period`` — one of
+    "daily", "weekly", "monthly". Surfaces momentum (what's rising now), which plain
+    star-count repo search misses. Returns rank, full_name, url, language, description."""
+    if not settings.trendshift_enabled:
+        return "Trendshift source is disabled."
+    if period not in PERIODS:
+        period = "daily"
+    try:
+        repos = await TrendshiftClient().trending(period, limit)
+    except Exception as exc:
+        return f"Trending search failed: {exc}"
+    return json.dumps(repos, ensure_ascii=False)
+
+
+FEED_TOOLS = [find_github_issues, search_github_repositories, find_trending_repos]
