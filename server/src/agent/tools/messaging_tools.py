@@ -23,6 +23,7 @@ async def send_message(ctx: RunContext[AgentDeps], text: str) -> str:
         return "no channel configured; message not sent"
     await ctx.deps.channel.send(text)
     ctx.deps.sent_count += 1
+    ctx.deps.sent_texts.append(text)
     return "sent"
 
 

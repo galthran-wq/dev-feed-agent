@@ -65,6 +65,14 @@ class Settings(BaseSettings):
     # bar (one compact line each), leaning exploit with some explore — see prompts/chat.md.
     agent_history_token_budget: int = 12000
 
+    # --- Long-term memory (mem0, OSS over pgvector; LLM + embeddings via OpenRouter) ---
+    mem0_chat_model: str = "deepseek/deepseek-v4-flash"
+    mem0_embed_model: str = "qwen/qwen3-embedding-8b"
+    # qwen3 is matryoshka (max 4096) — truncated to this via the OpenAI `dimensions` param.
+    # Keep <=2000: pgvector's HNSW index rejects more.
+    mem0_embed_dims: int = 1024
+    mem0_search_limit: int = 5
+
     @property
     def agent_enabled(self) -> bool:
         return bool(self.openrouter_api_key)
