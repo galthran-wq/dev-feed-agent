@@ -24,6 +24,7 @@ dependencies = [
     "tiktoken>=0.8.0",
     "cryptography>=42.0.0",
     "aiohttp-socks>=0.11.0",
+    "logfire[fastapi,httpx]>=4.37.0",
     "mem0ai>=2.0,<3",
     "psycopg[binary,pool]>=3.2",  # mem0's pgvector store needs a sync psycopg pool
 ]

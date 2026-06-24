@@ -65,6 +65,11 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Before routes/agents run, so FastAPI requests and every agent run are traced.
+    from src.core.telemetry import configure_telemetry
+
+    configure_telemetry(application)
+
     register_middleware(application)
     register_exception_handlers(application)
     application.include_router(router)

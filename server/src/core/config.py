@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     # Unreachable sources are dropped (logged) instead of aborting the whole run.
     mcp_probe_timeout: float = 5.0
 
+    # --- Observability (Pydantic Logfire; opt-in) ---
+    # Write token for the app to SEND traces; empty => tracing off (app runs normally).
+    # The read token (for querying traces, e.g. the MCP) is a separate credential.
+    logfire_token: str = ""
+    logfire_base_url: str = "https://logfire-eu.pydantic.dev"
+    logfire_environment: str = "production"
+
     # --- Feed curation ---
     discovery_enabled: bool = True
     poll_interval_minutes: int = 60
