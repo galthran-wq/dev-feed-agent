@@ -11,6 +11,7 @@ import structlog
 from pydantic_ai import RunContext
 from src.agent.deps import AgentDeps
 from src.agent.github_client import GithubClient
+from src.agent.paperswithcode_client import PapersWithCodeClient
 from src.agent.trendshift_client import PERIODS, TrendshiftClient
 from src.core.config import settings
 
@@ -70,4 +71,22 @@ async def find_trending_repos(ctx: RunContext[AgentDeps], period: str = "daily",
     return json.dumps(repos, ensure_ascii=False)
 
 
-FEED_TOOLS = [find_github_issues, search_github_repositories, find_trending_repos]
+async def find_trending_papers(ctx: RunContext[AgentDeps], limit: int = 30) -> str:
+    """List papers trending on Papers with Code (paperswithcode.co) — ML/AI papers
+    ranked by current momentum, each with its linked code repo (stars) and HuggingFace
+    model. Returns title, url, published, categories, summary, top_repo, hf_model."""
+    if not settings.paperswithcode_enabled:
+        return "Papers with Code source is disabled."
+    try:
+        papers = await PapersWithCodeClient().trending(limit)
+    except Exception as exc:
+        return f"Trending papers search failed: {exc}"
+    return json.dumps(papers, ensure_ascii=False)
+
+
+FEED_TOOLS = [
+    find_github_issues,
+    search_github_repositories,
+    find_trending_repos,
+    find_trending_papers,
+]
