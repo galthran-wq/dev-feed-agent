@@ -8,12 +8,10 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.agent import runtime
 from src.agent.channels import Channel
-from src.core.config import settings
 from src.models.postgres.users import UserModel
 
 logger = structlog.get_logger()
 
-_AGENT_DISABLED = "The agent isn't configured yet."
 # One shared constant so this layer and the Telegram adapter can't drift on the wording.
 GENERIC_ERROR = "Sorry, something went wrong handling that. Try again in a moment."
 
@@ -27,9 +25,6 @@ async def process_incoming(channel: Channel, session: AsyncSession, user: UserMo
         return
 
     if text == "/compact":
-        if not settings.agent_enabled:
-            await channel.send(_AGENT_DISABLED)
-            return
         try:
             summary = await runtime.compact(session, user)
         except Exception as exc:
@@ -40,9 +35,6 @@ async def process_incoming(channel: Channel, session: AsyncSession, user: UserMo
         return
 
     # Free text → chat agent (it replies via send_message).
-    if not settings.agent_enabled:
-        await channel.send(_AGENT_DISABLED)
-        return
     try:
         await runtime.chat(session, user, text, channel)
     except Exception as exc:
